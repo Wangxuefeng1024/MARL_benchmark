@@ -1,8 +1,10 @@
-# MARL benchmarks
+# MARL Benchmarks
 
-That's the repository of collecting current popular MARL envrionments and baselines.
-Pytorch implementations of the multi-agent reinforcement learning algorithms, including 
-[IQL](https://arxiv.org/abs/1511.08779),
+This repository collects current popular MARL environments, and implements several algorithms on top of them.
+I provide detailed information for each environment, you can check it under its directory.
+
+## Environments
+[StarCraft Multi-Agent Challenge (SMAC)](https://github.com/oxwhirl/smac),
 [QMIX](https://arxiv.org/abs/1803.11485), [VDN](https://arxiv.org/abs/1706.05296), 
 [COMA](https://arxiv.org/abs/1705.08926), [QTRAN](https://arxiv.org/abs/1905.05408)(both **QTRAN-base** and **QTRAN-alt**),
 [MAVEN](https://arxiv.org/abs/1910.07483), [CommNet](https://arxiv.org/abs/1605.07736), 
