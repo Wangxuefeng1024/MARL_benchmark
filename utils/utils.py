@@ -109,3 +109,41 @@ def obs_transform(state_dict_tensor, n_agents):
     flattern_obs = torch.stack((flattern_obs), dim=0)
 
     return flattern_obs.numpy()
+
+def soft_update(target, source, t):
+    for target_param, source_param in zip(target.parameters(),
+                                          source.parameters()):
+        target_param.data.copy_(
+            (1 - t) * target_param.data + t * source_param.data)
+
+
+def hard_update(target, source):
+    for target_param, source_param in zip(target.parameters(),
+                                          source.parameters()):
+        target_param.data.copy_(source_param.data)
+
+def reward_from_state(n_state, n_agents, env):
+    rew = []
+
+    for state in n_state:
+
+        obs_landmark = np.array(state[4:4+n_agents*2])
+        agent_reward = 0
+        for i in range(n_agents):
+
+            sub_obs = obs_landmark[i*2: i*2+2]
+
+            dist = np.sqrt(sub_obs[0]**2 + sub_obs[1]**2)
+
+
+            # if dist < 0.4: agent_reward += 0.3
+            if dist < 0.2: agent_reward += 0.5
+            if dist < 0.1: agent_reward += 1.
+
+            other_agents_pos = [env.agents[j].state.p_pos for j in range(n_agents) if j!= i]
+            to_other_distance = [((other_agents_pos[s][0]-env.agents[i].state.p_pos[0])**2+(other_agents_pos[s][1]-env.agents[i].state.p_pos[1])**2)**0.5 for s in range(len(other_agents_pos))]
+            for p in range(len(to_other_distance)):
+                if to_other_distance[p] <= 1:
+                    agent_reward -= 0.25
+        rew.append(agent_reward)
+    return rew

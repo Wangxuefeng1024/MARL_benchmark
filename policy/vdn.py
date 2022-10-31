@@ -5,11 +5,12 @@ from network.vdn import VDNNet
 
 
 class VDN:
-    def __init__(self, args):
+    def __init__(self, env, args):
         self.n_actions = args.n_actions
         self.n_agents = args.n_agents
         self.state_shape = args.state_shape
         self.obs_shape = args.obs_shape
+        self.env = env
         input_shape = self.obs_shape
         # 根据参数决定RNN的输入维度
         if args.last_action:
@@ -174,3 +175,4 @@ class VDN:
             os.makedirs(self.model_dir)
         torch.save(self.eval_vdn_net.state_dict(), self.model_dir + '/' + num + '_vdn_net_params.pkl')
         torch.save(self.eval_rnn.state_dict(),  self.model_dir + '/' + num + '_rnn_net_params.pkl')
+
