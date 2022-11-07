@@ -64,7 +64,7 @@ class Actor(nn.Module):
 		return result
 
 	def act(self, state):
-		if self.has_continuous_action_space:
+		if self.continuous:
 			action_mean = self.actor(state)
 			cov_mat = torch.diag(self.action_var).unsqueeze(dim=0)
 			dist = MultivariateNormal(action_mean, cov_mat)

@@ -114,6 +114,9 @@ class PPO_RolloutBuffer:
         self.logprobs = []
         self.rewards = []
         self.is_terminals = []
+        self.action_one_hot = []
+        self.avail_actions = []
+
 
     def clear(self):
         del self.actions[:]
@@ -121,3 +124,5 @@ class PPO_RolloutBuffer:
         del self.logprobs[:]
         del self.rewards[:]
         del self.is_terminals[:]
+        del self.action_one_hot[:]
+        del self.avail_actions[:]

@@ -584,8 +584,9 @@ class gfoot_qmix:
         last_action = np.zeros((self.args.n_agents, self.args.n_actions))
         self.init_hidden(1)
         # done = False
-        obs = self.env.reset()
-
+        obs, state, ava = self.env.reset()
+        o.append(obs)
+        s.append(np.array(state).flatten())
         # epsilon
         epsilon = 0 if evaluate else self.epsilon
         if self.args.epsilon_anneal_scale == 'episode':
@@ -595,19 +596,19 @@ class gfoot_qmix:
             # time.sleep(0.2)
             # check_obs = self.env.observation()
             # cc, aa = tranf_obs(check_obs, self.feature_encoder)
-            observation = self.env.observation()[1:self.args.n_agents+1]
-            obs, ava_actions = tranf_obs(observation, self.feature_encoder)
-            # self.env.render()
-            # obs = obs.squeeze()
-            # obs = self.feature_encoder.encode(observation)
-            # obs = football_observation_wrapper(observation)
-            # obs = self.env.observation(observation)
-            # aa = [-i-1 for i in range(self.n_agents*2)]
-            state = obs.flatten()
+            # observation = self.env.observation()[1:self.args.n_agents+1]
+            # obs, ava_actions = tranf_obs(observation, self.feature_encoder)
+            # # self.env.render()
+            # # obs = obs.squeeze()
+            # # obs = self.feature_encoder.encode(observation)
+            # # obs = football_observation_wrapper(observation)
+            # # obs = self.env.observation(observation)
+            # # aa = [-i-1 for i in range(self.n_agents*2)]
+            # state = obs.flatten()
             actions, actions_onehot = [], []
             for agent_id in range(self.n_agents):
                 # avail_action = self.env.get_avail_agent_actions(agent_id)
-                action = self.choose_action(obs[agent_id], ava_actions[agent_id], agent_id, epsilon)
+                action = self.choose_action(obs[agent_id], ava[agent_id], agent_id, epsilon)
                 # generate onehot vector of th action
                 action_onehot = np.zeros(self.args.n_actions)
                 action_onehot[action] = 1
@@ -615,52 +616,68 @@ class gfoot_qmix:
                 actions_onehot.append(action_onehot)
                 # avail_actions.append(avail_action)
                 last_action[agent_id] = action_onehot
-            all_actions = deepcopy(actions)
-            all_actions.insert(0, 0)
-            next_obs, reward, terminated, info = self.env.step(all_actions)
+            # all_actions = deepcopy(actions)
+            # all_actions.insert(0, 0)
+            obs, state, rewards, dones, infos, ava = self.env.step(actions)
+            terminated = True if True in dones else False
             # if done:
             #     print('debug here')
-            next_obs = next_obs[1:self.args.n_agents+1]
-            rewards = calc_reward(reward, observation[0], next_obs[0], step)
+            # next_obs = next_obs[1:self.args.n_agents+1]
+            # rewards = calc_reward(reward, observation[0], next_obs[0], step)
 
-            rewards = sum(rewards)
+            # rewards = sum(rewards)
             # next_obs = football_observation_wrapper(next_obs)
             # reward = football_reward_wrapper(next_obs, reward)
-            if info['score_reward'] > 0:
-                win_tag = True
+            for value in infos:
+                if value['score_reward'] > 0:
+                    win_tag = True
             o.append(obs)
-            s.append(state)
+            s.append(np.array(state).flatten())
             u.append(np.reshape(actions, [self.n_agents, 1]))
             u_onehot.append(actions_onehot)
-            avail_u.append(ava_actions)
+            avail_u.append(ava)
             step += 1
-            r.append([rewards])
+            r.append([np.sum(rewards)])
             terminate.append([terminated])
             padded.append([0.])
-            episode_reward += rewards
+            episode_reward += np.sum(rewards)
 
             if self.args.epsilon_anneal_scale == 'step':
                 epsilon = epsilon - self.anneal_epsilon if epsilon > self.min_epsilon else epsilon
             # not win_tag and step < self.args.episode_limit:
         # last obs
-        obs = self.env.observation()[1:self.args.n_agents+1]
-        obs, ava_actions = tranf_obs(obs, self.feature_encoder)
-        obs = obs.squeeze()
-        state = obs.flatten()
-        o.append(obs)
-        s.append(state)
+        # obs = self.env.observation()[1:self.args.n_agents+1]
+        # obs, ava_actions = tranf_obs(obs, self.feature_encoder)
+        # obs = obs.squeeze()
+        # state = obs.flatten()
+        # o.append(obs)
+        # s.append(state)
         o_next = o[1:]
         s_next = s[1:]
         o = o[:-1]
         s = s[:-1]
         # get avail_action for last obs，because target_q needs avail_action in training
         # avail_actions = []
-        # for agent_id in range(self.n_agents):
-        #     avail_action = self.env.get_avail_agent_actions(agent_id)
-        #     avail_actions.append(avail_action)
+        if not terminated:
+            actions, actions_onehot = [], []
+            for agent_id in range(self.n_agents):
+                # avail_action = self.env.get_avail_agent_actions(agent_id)
+                action = self.choose_action(obs[agent_id], ava[agent_id], agent_id, epsilon)
+                # generate onehot vector of th action
+                action_onehot = np.zeros(self.args.n_actions)
+                action_onehot[action] = 1
+                actions.append(np.int(action))
+                actions_onehot.append(action_onehot)
+                # avail_actions.append(avail_action)
+                last_action[agent_id] = action_onehot
+
+            obs, state, rewards, dones, infos, ava = self.env.step(actions)
+        else:
+            ava = np.zeros([self.args.n_agents, self.args.n_actions])
+            # avail_actions.append(ava)
         # observation = self.env.observation()[1:self.args.n_agents + 1]
         # obs, ava_actions = tranf_obs(observation, self.feature_encoder)
-        avail_u.append(ava_actions)
+        avail_u.append(ava)
         avail_u_next = avail_u[1:]
         avail_u = avail_u[:-1]
 
@@ -693,6 +710,7 @@ class gfoot_qmix:
         # add episode dim
         for key in episode.keys():
             episode[key] = np.array([episode[key]])
+        # episode['r'] = episode['r'].reshape((1, self.args.episode_limit, 1))
         if not evaluate:
             self.epsilon = epsilon
 

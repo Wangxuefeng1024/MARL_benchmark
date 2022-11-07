@@ -1,11 +1,11 @@
 import torch
 from tensorboardX import SummaryWriter
-
-import gfootball.env as football_env
-from Algos.qmix.qmix_agent import gfoot_qmix
-from Algos.iql.iql_agent import IQL
-from Algos.coma.coma_agent import COMA
-from Algos.TarMAC.tarmac_agent import gfoot_TarMAC, MAPPO
+from Envs.football.football_env import FootballEnv
+from policy.qmix import gfoot_qmix
+from policy.ppo import MAPPO_GRF
+# from Algos.iql.iql_agent import IQL
+# from Algos.coma.coma_agent import COMA
+# from Algos.TarMAC.tarmac_agent import gfoot_TarMAC, MAPPO
 import argparse
 import numpy as np
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -21,12 +21,11 @@ def main(args):
     # set the number of agents by the sceanrio
     if args.scenario in ['academy_pass_and_shoot_with_keeper', 'academy_run_pass_and_shoot_with_keeper']:
         args.n_agents = 2
-
-        args.obs_shape = 115
+        args.obs_shape = 98
         args.n_states = args.obs_shape*args.n_agents
     elif args.scenario == 'academy_3_vs_1_with_keeper':
         args.n_agents = 3
-        args.obs_shape = 122
+        args.obs_shape = 105
         args.n_states = args.obs_shape*args.n_agents
     else:
         args.n_agents = 2
@@ -37,36 +36,30 @@ def main(args):
     # args.n_states = 29
     # args.obs_shape = 33
 
-    env = football_env.create_environment(
-            env_name=args.scenario,
-            representation='raw',
-            rewards='scoring',
-            render=False,
-            write_video=False,
-            logdir='',
-            extra_players=None,
-            number_of_left_players_agent_controls=args.n_agents+1,
-            number_of_right_players_agent_controls=0,
-            )
+    env = FootballEnv(args=args)
     # create model
     if args.algo == "qmix":
         model = gfoot_qmix(env, args)
-    elif args.algo == "iql":
-        model = IQL(env, args)
-    elif args.algo == "coma":
-        model = COMA(env, args)
-    elif args.algo == "tarmac":
-        model = gfoot_TarMAC(env, args)
+    # elif args.algo == "iql":
+    #     model = IQL(env, args)
+    # elif args.algo == "coma":
+    #     model = COMA(env, args)
+    # elif args.algo == "tarmac":
+    #     model = gfoot_TarMAC(env, args)
     elif args.algo == "mappo":
-        model = MAPPO(env, args)
-    else:
-        model = gfoot_qmix(env, args)
+        model = MAPPO_GRF(env, args)
+    # else:
+    #     model = gfoot_qmix(env, args)
     print(model)
+
+
+
     # get the whole rollout now
     # we utilize on-policy ppo or dqn now, for the dqn we are sample the whole episodes to the replay buffer
     # episode_id = 0
     # train_steps = 0
     total_step = 0
+
     time_steps, train_steps, evaluate_steps = 0, 0, -1
     total_rewards = 0
     while time_steps < args.max_steps:
@@ -88,18 +81,28 @@ def main(args):
         episode, _, _, steps = model.generate_episode(train_steps)
         episodes.append(episode)
         time_steps += steps
-        episode_batch = episodes[0]
-        total_rewards = np.sum(episode_batch['r'])
+
+        if args.algo != "mappo":
+            episode_batch = episodes[0]
+            total_rewards = np.sum(episode_batch['r'])
+
+            episodes.pop(0)
+            for episode in episodes:
+                for key in episode_batch.keys():
+                    episode_batch[key] = np.concatenate((episode_batch[key], episode[key]), axis=0)
+            # if args.algo != "mappo":
+            model.buffer.store_episode(episode_batch)
+        else:
+            total_rewards = torch.sum(torch.stack(model.buffer.rewards)).item()
         writer.add_scalar(tag='agent/rewards', global_step=time_steps, scalar_value=total_rewards)
-        episodes.pop(0)
-        for episode in episodes:
-            for key in episode_batch.keys():
-                episode_batch[key] = np.concatenate((episode_batch[key], episode[key]), axis=0)
-        model.buffer.store_episode(episode_batch)
         for train_step in range(args.train_steps):
-            mini_batch = model.buffer.sample(min(model.buffer.current_size, model.args.batch_size))
-            model.train(mini_batch, train_steps)
+            if args.algo != "mappo":
+                mini_batch = model.buffer.sample(min(model.buffer.current_size, model.args.batch_size))
+                model.train(mini_batch, train_steps)
+            if args.algo == "mappo":
+                model.train()
             train_steps += 1
+
         if train_steps % args.save_cycle == 0:
             model.save_model(train_steps)
         train_steps += 1
@@ -109,12 +112,18 @@ def main(args):
     model.episode_rewards.append(episode_reward)
     env.close()
 
+def _t2n(x):
+    return x.detach().cpu().numpy()
+
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     # the environment setting
     parser.add_argument('--difficulty', type=str, default='5', help='the difficulty of the game')
     parser.add_argument('--scenario', type=str, default='academy_pass_and_shoot_with_keeper', help='academy_pass_and_shoot_with_keeper, academy_run_pass_and_shoot_with_keeper, academy_3_vs_1_with_keeper')
+    parser.add_argument('--reward', type=str, default='scoring', help='the map of the game')
 
     parser.add_argument('--game_version', type=str, default='latest', help='the version of the game')
     parser.add_argument('--map', type=str, default='5m_vs_6m', help='the map of the game')
@@ -129,7 +138,7 @@ if __name__ == '__main__':
     parser.add_argument('--qmix_hidden_dim', type=int, default=32, help='qmix dimension')
     parser.add_argument('--critic_dim', type=int, default=128, help='critic dimension')
     parser.add_argument('--step_mul', type=int, default=8, help='how many steps to make an action')
-    parser.add_argument('--n_agents', type=int, default=5, help='how many steps to make an action')
+    parser.add_argument('--n_agents', type=int, default=3, help='how many steps to make an action')
     parser.add_argument('--replay_dir', type=str, default='', help='absolute path to save the replay')
     parser.add_argument('--test_episodes', type=int, default=20, help='random seed')
     parser.add_argument('--train_steps', type=int, default=1, help='random seed')
@@ -144,8 +153,9 @@ if __name__ == '__main__':
     parser.add_argument('--tensorboard', type=bool, default=True, help='whether to use tensorboard')
     parser.add_argument('--gamma', type=float, default=0.99, help='discount factor')
     parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
-    parser.add_argument('--lr_critic', type=float, default=1e-4, help='critic learning rate')
-    parser.add_argument('--lr_actor', type=float, default=1e-4, help='actor learning rate')
+    parser.add_argument('--c_lr', type=float, default=1e-4, help='critic learning rate')
+    parser.add_argument('--a_lr', type=float, default=1e-4, help='actor learning rate')
+    parser.add_argument('--grad_norm', type=float, default=1, help='actor learning rate')
 
     parser.add_argument('--entropy_coeff', type=float, default=0.01, help='discount factor')
     parser.add_argument('--clip_param', type=float, default=0.2, help='discount factor')
@@ -162,9 +172,14 @@ if __name__ == '__main__':
     parser.add_argument('--evaluate_epoch', type=int, default=20, help='number of the epoch to evaluate the agent')
     parser.add_argument('--batch_size', type=int, default=32, help='batch size')
     parser.add_argument('--buffer_size', type=int, default=int(1e4), help='buffer size')
+    parser.add_argument('--k_epochs', type=int, default=8, help='buffer size')
+
+
     parser.add_argument('--model_dir', type=str, default='./model', help='model directory of the policy')
     parser.add_argument('--result_dir', type=str, default='./result', help='result directory of the policy')
     parser.add_argument('--load_model', type=bool, default=False, help='whether to load the pretrained model')
+    parser.add_argument('--continuous', type=bool, default=False, help='whether to load the pretrained model')
+
     parser.add_argument('--two_hyper_layers', type=bool, default=True, help='whether to use two hyper layers')
     parser.add_argument('--td_lambda', type=float, default=0.8, help='value of td lambda')
     parser.add_argument('--evaluate', type=bool, default=False, help='whether to evaluate the model')
