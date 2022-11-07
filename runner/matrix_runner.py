@@ -113,7 +113,7 @@ def play(self):
             state = next_state
             observations = next_observations
 
-            if self.args.env_name == 'one_step_payoff_matrix':
+            if self.args.env_name == 'one_step_payoff_matrix1' or self.args.env_name == 'one_step_payoff_matrix2':
                 q_value_list[actions[0]][actions[1]] += q_total_evals
                 iteration[actions[0]][actions[1]] += 1
             elif self.args.env_name == 'two_step_payoff_matrix':
@@ -137,7 +137,7 @@ def play(self):
             if done:
                 break
 
-    if self.args.env_name == 'one_step_payoff_matrix':
+    if self.args.env_name == 'one_step_payoff_matrix1' or self.args.env_name == 'one_step_payoff_matrix2':
         for i in range(self.args.n_actions):
             for j in range(self.args.n_actions):
                 q_value_list[i][j] /= iteration[i][j]
@@ -155,11 +155,17 @@ def play(self):
 
 def main(args):
     # One Step Pay-off Matrix or Two Step Pay-off Matrix
-    if args.env_name == 'one_step_payoff_matrix':
+    if args.env_name == 'one_step_payoff_matrix_1':
         args.state_shape = 2
         args.obs_shape = 2
         args.n_actions = 3
         value_list = [10.4, 0., 10., 0., 10., 10., 10., 10., 10.]
+        env = OneStepPayOffMatrix(value_list=value_list)
+    elif args.env_name == 'one_step_payoff_matrix_2':
+        args.state_shape = 2
+        args.obs_shape = 2
+        args.n_actions = 3
+        value_list = [8., -12., -12., -12., 0., 0., -12., 0., 0.]
         env = OneStepPayOffMatrix(value_list=value_list)
     elif args.env_name == 'two_step_payoff_matrix':
         args.state_shape = 4

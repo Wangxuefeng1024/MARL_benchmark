@@ -1,6 +1,9 @@
-import torch as th
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.distributions import MultivariateNormal
+from torch.distributions import Categorical
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Critic(nn.Module):
 	def __init__(self,n_agent, dim_observation, dim_action):
@@ -19,9 +22,11 @@ class Critic(nn.Module):
 	# obs:batch_size * obs_dim
 	def forward(self, obs, acts):
 		result = F.relu(self.FC1(obs))
-		combined = th.cat([result, acts], dim=1)
+		combined = torch.cat([result, acts], dim=1)
 		result = F.relu(self.FC2(combined))
 		return self.FC4(F.relu(self.FC3(result)))
+
+
 		
 # class Actor(nn.Module):
 # 	def __init__(self,dim_observation,dim_action):
@@ -57,4 +62,26 @@ class Actor(nn.Module):
 		else:
 			result = F.softmax(self.FC3(result), dim=-1).squeeze()
 		return result
+
+	def act(self, state):
+		if self.has_continuous_action_space:
+			action_mean = self.actor(state)
+			cov_mat = torch.diag(self.action_var).unsqueeze(dim=0)
+			dist = MultivariateNormal(action_mean, cov_mat)
+		else:
+			action_probs = self.actor(state)
+			dist = Categorical(action_probs)
+
+		action = dist.sample()
+		action_logprob = dist.log_prob(action)
+
+		return action.detach(), action_logprob.detach()
+
+	def set_action_std(self, new_action_std):
+		if self.has_continuous_action_space:
+			self.action_var = torch.full((self.action_dim,), new_action_std * new_action_std).to(device)
+		else:
+			print("--------------------------------------------------------------------------------------------")
+			print("WARNING : Calling ActorCritic::set_action_std() on discrete action space policy")
+			print("--------------------------------------------------------------------------------------------")
 

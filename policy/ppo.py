@@ -1,206 +1,436 @@
-import numpy as np
 import torch
 import torch.nn as nn
-from utils.namedtuple_memory import ReplayMemory, Experience
-import math
+# import torch.nn.functional as F
+from torch.distributions import MultivariateNormal
+from torch.distributions import Categorical
+from utils.sc_memory import PPO_RolloutBuffer
+
+# set device to cpu or cuda
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def huber_loss(e, d):
-    a = (abs(e) <= d).float()
-    b = (e > d).float()
-    return a*e**2/2 + b*d*(abs(e)-d/2)
 
-def mse_loss(e):
-    return e**2/2
+# class ActorCritic(nn.Module):
+#     def __init__(self, state_dim, action_dim, has_continuous_action_space, action_std_init):
+#         super(ActorCritic, self).__init__()
+#
+#         self.has_continuous_action_space = has_continuous_action_space
+#
+#         if has_continuous_action_space:
+#             self.action_dim = action_dim
+#             self.action_var = torch.full((action_dim,), action_std_init * action_std_init).to(device)
+#         # actor
+#         if has_continuous_action_space:
+#             self.actor = nn.Sequential(
+#                 nn.Linear(state_dim, 64),
+#                 nn.Tanh(),
+#                 nn.Linear(64, 64),
+#                 nn.Tanh(),
+#                 nn.Linear(64, action_dim),
+#             )
+#         else:
+#             self.actor = nn.Sequential(
+#                 nn.Linear(state_dim, 64),
+#                 nn.Tanh(),
+#                 nn.Linear(64, 64),
+#                 nn.Tanh(),
+#                 nn.Linear(64, action_dim),
+#                 nn.Softmax(dim=-1)
+#             )
+#         # critic
+#         self.critic = nn.Sequential(
+#             nn.Linear(state_dim, 64),
+#             nn.Tanh(),
+#             nn.Linear(64, 64),
+#             nn.Tanh(),
+#             nn.Linear(64, 1)
+#         )
+#
+#     def set_action_std(self, new_action_std):
+#         if self.has_continuous_action_space:
+#             self.action_var = torch.full((self.action_dim,), new_action_std * new_action_std).to(device)
+#         else:
+#             print("--------------------------------------------------------------------------------------------")
+#             print("WARNING : Calling ActorCritic::set_action_std() on discrete action space policy")
+#             print("--------------------------------------------------------------------------------------------")
+#
+#     def forward(self):
+#         raise NotImplementedError
+#
+#     def act(self, state):
+#         if self.has_continuous_action_space:
+#             action_mean = self.actor(state)
+#             cov_mat = torch.diag(self.action_var).unsqueeze(dim=0)
+#             dist = MultivariateNormal(action_mean, cov_mat)
+#         else:
+#             action_probs = self.actor(state)
+#             dist = Categorical(action_probs)
+#
+#         action = dist.sample()
+#         action_logprob = dist.log_prob(action)
+#
+#         return action.detach(), action_logprob.detach()
+#
+#     def evaluate(self, state, action):
+#
+#         if self.has_continuous_action_space:
+#             action_mean = self.actor(state)
+#
+#             action_var = self.action_var.expand_as(action_mean)
+#             cov_mat = torch.diag_embed(action_var).to(device)
+#             dist = MultivariateNormal(action_mean, cov_mat)
+#
+#             # For Single Action Environments.
+#             if self.action_dim == 1:
+#                 action = action.reshape(-1, self.action_dim)
+#         else:
+#             action_probs = self.actor(state)
+#             dist = Categorical(action_probs)
+#         action_logprobs = dist.log_prob(action)
+#         dist_entropy = dist.entropy()
+#         state_values = self.critic(state)
+#
+#         return action_logprobs, state_values, dist_entropy
 
-def check(input):
-    output = torch.from_numpy(input) if type(input) == np.ndarray else input
-    return output
 
-def get_gard_norm(it):
-    sum_grad = 0
-    for x in it:
-        if x.grad is None:
-            continue
-        sum_grad += x.grad.norm() ** 2
-    return math.sqrt(sum_grad)
+class MAPPO:
+    def __init__(self, state_dim, action_dim, n_agents, args):
 
-class ppo:
-    def __init__(self, dim_obs, dim_act, n_agents, args):
-        self.args = args
-        self.mode = args.mode
-        if args.algo == "maddpg":
-            from network.maddpg import Actor, Critic
-        elif args.algo == "tarmac":
-            from network.tarmac import Actor, Critic
-        else:
-            from network.maddpg import Actor, Critic
+        self.continuous = args.continuous
+
+        if self.continuous:
+            self.action_std = 0.6
+
         self.n_agents = n_agents
-        self.n_states = dim_obs
-        self.n_actions = dim_act
-        self.clip_param = args.clip_param
-        self.ppo_epoch = args.ppo_epoch
-        self.num_mini_batch = args.num_mini_batch
-        self.actor = Actor(dim_obs, dim_act, args)
-        self.critic = Critic(n_agents, dim_obs, dim_act)
-        self.tpdv = dict(dtype=torch.float32, device=device)
-        self.entropy_coef = args.entropy_coef
-        self.memory = ReplayMemory(args.memory_length)
-        self.batch_size = args.batch_size
-        self.use_cuda = torch.cuda.is_available()
-        self.episodes_before_train = args.episode_before_train
-        self.huber_delta = args.huber_delta
-
-        self._use_recurrent_policy = args.use_recurrent_policy
-        self._use_naive_recurrent = args.use_naive_recurrent_policy
-        self._use_max_grad_norm = args.use_max_grad_norm
-        self._use_clipped_value_loss = args.use_clipped_value_loss
-        self._use_huber_loss = args.use_huber_loss
-        self._use_valuenorm = args.use_valuenorm
-        self._use_value_active_masks = args.use_value_active_masks
-        self._use_policy_active_masks = args.use_policy_active_masks
-        self.dec_actor = args.dec_actor
-
-    def cal_value_loss(self, values, value_preds_batch, return_batch, active_masks_batch):
-        """
-        Calculate value function loss.
-        :param values: (torch.Tensor) value function predictions.
-        :param value_preds_batch: (torch.Tensor) "old" value  predictions from data batch (used for value clip loss)
-        :param return_batch: (torch.Tensor) reward to go returns.
-        :param active_masks_batch: (torch.Tensor) denotes if agent is active or dead at a given timesep.
-
-        :return value_loss: (torch.Tensor) value function loss.
-        """
-
-        value_pred_clipped = value_preds_batch + (values - value_preds_batch).clamp(-self.clip_param,
-                                                                                    self.clip_param)
-
-
-        error_clipped = return_batch - value_pred_clipped
-        error_original = return_batch - values
-
-        if self._use_huber_loss:
-            value_loss_clipped = huber_loss(error_clipped, self.huber_delta)
-            value_loss_original = huber_loss(error_original, self.huber_delta)
+        self.action_dim = action_dim
+        self.state_dim = state_dim
+        self.gamma = args.gamma
+        self.eps_clip = args.eps_clip
+        self.K_epochs = args.k_epochs
+        self.args = args
+        self.buffer = PPO_RolloutBuffer()
+        # Networks
+        if args.algo == "tarmac":
+            from network.tarmac import Actor, Critic
+        elif args.algo == "commnet":
+            from network.commnet import Actor, Critic
         else:
-            value_loss_clipped = mse_loss(error_clipped)
-            value_loss_original = mse_loss(error_original)
+            from network.tarmac import Actor, Critic
+        self.actor = Actor(state_dim, action_dim, args)  # Actor(s_dim, a_dim, n_agents)
+        self.critic = Critic(self.n_agents, state_dim, action_dim, args)
+        self.old_actor = Actor(state_dim, action_dim, args)
+        self.actor.to(device)
+        self.critic.to(device)
+        self.old_actor.to(device)
 
-        if self._use_clipped_value_loss:
-            value_loss = torch.max(value_loss_original, value_loss_clipped)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.args.a_lr)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=self.args.c_lr)
+
+        # self.optimizer = torch.optim.Adam([
+        #     {'params': self.policy.actor.parameters(), 'lr': lr_actor},
+        #     {'params': self.policy.critic.parameters(), 'lr': lr_critic}
+        # ])
+        #
+        #
+        # self.policy = ActorCritic(state_dim, action_dim, has_continuous_action_space, action_std_init).to(device)
+        # self.optimizer = torch.optim.Adam([
+        #     {'params': self.policy.actor.parameters(), 'lr': lr_actor},
+        #     {'params': self.policy.critic.parameters(), 'lr': lr_critic}
+        # ])
+        #
+        # self.policy_old = ActorCritic(state_dim, action_dim, has_continuous_action_space, action_std_init).to(device)
+        # self.policy_old.load_state_dict(self.policy.state_dict())
+
+        self.MseLoss = nn.MSELoss()
+
+    def set_action_std(self, new_action_std):
+        if self.continuous:
+            self.action_std = new_action_std
+            self.actor.set_action_std(new_action_std)
+            self.old_actor.set_action_std(new_action_std)
         else:
-            value_loss = value_loss_original
+            print("--------------------------------------------------------------------------------------------")
+            print("WARNING : Calling PPO::set_action_std() on discrete action space policy")
+            print("--------------------------------------------------------------------------------------------")
 
-        # if self._use_value_active_masks and not self.dec_actor:
-        if self._use_value_active_masks:
-            value_loss = (value_loss * active_masks_batch).sum() / active_masks_batch.sum()
+    def decay_action_std(self, action_std_decay_rate, min_action_std):
+        print("--------------------------------------------------------------------------------------------")
+        if self.continuous:
+            self.action_std = self.action_std - action_std_decay_rate
+            self.action_std = round(self.action_std, 4)
+            if (self.action_std <= min_action_std):
+                self.action_std = min_action_std
+                print("setting actor output action_std to min_action_std : ", self.action_std)
+            else:
+                print("setting actor output action_std to : ", self.action_std)
+            self.set_action_std(self.action_std)
+
         else:
-            value_loss = value_loss.mean()
+            print("WARNING : Calling PPO::decay_action_std() on discrete action space policy")
+        print("--------------------------------------------------------------------------------------------")
 
-        return value_loss
+    def select_action(self, state):
 
-    def ppo_update(self, sample):
-        """
-        Update actor and critic networks.
-        :param sample: (Tuple) contains data batch with which to update networks.
-        :update_actor: (bool) whether to update actor network.
+        if self.continuous:
+            with torch.no_grad():
+                state = torch.FloatTensor(state).to(device)
+                action, action_logprob = self.old_actor.act(state)
 
-        :return value_loss: (torch.Tensor) value function loss.
-        :return critic_grad_norm: (torch.Tensor) gradient norm from critic up9date.
-        ;return policy_loss: (torch.Tensor) actor(policy) loss value.
-        :return dist_entropy: (torch.Tensor) action entropies.
-        :return actor_grad_norm: (torch.Tensor) gradient norm from actor update.
-        :return imp_weights: (torch.Tensor) importance sampling weights.
-        """
-        share_obs_batch, obs_batch, rnn_states_batch, rnn_states_critic_batch, actions_batch, \
-        value_preds_batch, return_batch, masks_batch, active_masks_batch, old_action_log_probs_batch, \
-        adv_targ, available_actions_batch = sample
+            self.buffer.states.append(state)
+            self.buffer.actions.append(action)
+            self.buffer.logprobs.append(action_logprob)
 
-        old_action_log_probs_batch = check(old_action_log_probs_batch).to(**self.tpdv)
-        adv_targ = check(adv_targ).to(**self.tpdv)
-        value_preds_batch = check(value_preds_batch).to(**self.tpdv)
-        return_batch = check(return_batch).to(**self.tpdv)
-        active_masks_batch = check(active_masks_batch).to(**self.tpdv)
-
-        # Reshape to do in a single forward pass for all steps
-        values, action_log_probs, dist_entropy = self.policy.evaluate_actions(share_obs_batch,
-                                                                              obs_batch,
-                                                                              rnn_states_batch,
-                                                                              rnn_states_critic_batch,
-                                                                              actions_batch,
-                                                                              masks_batch,
-                                                                              available_actions_batch,
-                                                                              active_masks_batch)
-        # actor update
-        imp_weights = torch.exp(action_log_probs - old_action_log_probs_batch)
-
-        surr1 = imp_weights * adv_targ
-        surr2 = torch.clamp(imp_weights, 1.0 - self.clip_param, 1.0 + self.clip_param) * adv_targ
-
-        if self._use_policy_active_masks:
-            policy_loss = (-torch.sum(torch.min(surr1, surr2),
-                                      dim=-1,
-                                      keepdim=True) * active_masks_batch).sum() / active_masks_batch.sum()
+            return action.detach().cpu().numpy().flatten()
         else:
-            policy_loss = -torch.sum(torch.min(surr1, surr2), dim=-1, keepdim=True).mean()
+            with torch.no_grad():
+                state = torch.FloatTensor(state).to(device)
+                action, action_logprob = self.old_actor.act(state)
 
-        # critic update
-        value_loss = self.cal_value_loss(values, value_preds_batch, return_batch, active_masks_batch)
+            self.buffer.states.append(state)
+            self.buffer.actions.append(action)
+            self.buffer.logprobs.append(action_logprob)
 
-        loss = policy_loss - dist_entropy * self.entropy_coef + value_loss * self.value_loss_coef
+            return action.item()
 
-        self.policy.optimizer.zero_grad()
-        loss.backward()
+    def evaluate(self, state, action):
 
-        if self._use_max_grad_norm:
-            grad_norm = nn.utils.clip_grad_norm_(self.policy.transformer.parameters(), self.max_grad_norm)
+        if self.continuous:
+            action_mean = self.actor(state)
+
+            action_var = self.actor.action_var.expand_as(action_mean)
+            cov_mat = torch.diag_embed(action_var).to(device)
+            dist = MultivariateNormal(action_mean, cov_mat)
+
+            # For Single Action Environments.
+            if self.actor.action_dim == 1:
+                action = action.reshape(-1, self.action_dim)
         else:
-            grad_norm = get_gard_norm(self.policy.transformer.parameters())
+            action_probs = self.actor(state)
+            dist = Categorical(action_probs)
+        action_logprobs = dist.log_prob(action)
+        dist_entropy = dist.entropy()
+        state_values = self.critic(state)
 
-        self.policy.optimizer.step()
+        return action_logprobs, state_values, dist_entropy
 
-        return value_loss, grad_norm, policy_loss, dist_entropy, grad_norm, imp_weights
+    def update(self):
+        # Monte Carlo estimate of returns
+        rewards = []
+        discounted_reward = 0
+        for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
+            if is_terminal:
+                discounted_reward = 0
+            discounted_reward = reward + (self.gamma * discounted_reward)
+            rewards.insert(0, discounted_reward)
 
-    def train(self, buffer):
-        """
-        Perform a training update using minibatch GD.
-        :param buffer: (SharedReplayBuffer) buffer containing training data.
-        :param update_actor: (bool) whether to update actor network.
+        # Normalizing the rewards
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
+        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
 
-        :return train_info: (dict) contains information regarding training update (e.g. loss, grad norms, etc).
-        """
-        advantages_copy = buffer.advantages.copy()
-        advantages_copy[buffer.active_masks[:-1] == 0.0] = np.nan
-        mean_advantages = np.nanmean(advantages_copy)
-        std_advantages = np.nanstd(advantages_copy)
-        advantages = (buffer.advantages - mean_advantages) / (std_advantages + 1e-5)
+        # convert list to tensor
+        old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(device)
+        old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(device)
+        old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(device)
 
-        train_info = {}
+        # Optimize policy for K epochs
+        for _ in range(self.K_epochs):
+            # Evaluating old actions and values
+            logprobs, state_values, dist_entropy = self.evaluate(old_states, old_actions)
 
-        train_info['value_loss'] = 0
-        train_info['policy_loss'] = 0
-        train_info['dist_entropy'] = 0
-        train_info['actor_grad_norm'] = 0
-        train_info['critic_grad_norm'] = 0
-        train_info['ratio'] = 0
+            # match state_values tensor dimensions with rewards tensor
+            state_values = torch.squeeze(state_values)
 
-        for _ in range(self.ppo_epoch):
-            data_generator = buffer.feed_forward_generator_transformer(advantages, self.num_mini_batch)
+            # Finding the ratio (pi_theta / pi_theta__old)
+            ratios = torch.exp(logprobs - old_logprobs.detach())
 
-            for sample in data_generator:
-                value_loss, critic_grad_norm, policy_loss, dist_entropy, actor_grad_norm, imp_weights \
-                    = self.ppo_update(sample)
+            # Finding Surrogate Loss
+            advantages = rewards - state_values.detach()
+            surr1 = ratios * advantages
+            surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages
 
-                train_info['value_loss'] += value_loss.item()
-                train_info['policy_loss'] += policy_loss.item()
-                train_info['dist_entropy'] += dist_entropy.item()
-                train_info['actor_grad_norm'] += actor_grad_norm
-                train_info['critic_grad_norm'] += critic_grad_norm
-                train_info['ratio'] += imp_weights.mean()
+            # actor loss
+            action_loss = -torch.min(surr1, surr2).mean()  # MAX->MIN desent
+            self.actor_optimizer.zero_grad()
+            action_loss.backward()
+            nn.utils.clip_grad_norm_(self.actor.parameters(), self.args.grad_norm)
+            self.actor_optimizer.step()
 
-        num_updates = self.ppo_epoch * self.num_mini_batch
+            # critic loss
+            value_loss = 0.5 * self.MseLoss(state_values, rewards)
+            self.critic_optimizer.zero_grad()
+            value_loss.backward()
+            nn.utils.clip_grad_norm_(self.critic.parameters(), self.args.grad_norm)
+            self.critic_optimizer.step()
+            # final loss of clipped objective PPO
+        # clear buffer
+        self.buffer.clear()
 
-        for k in train_info.keys():
-            train_info[k] /= num_updates
+    def save(self, checkpoint_path):
+        torch.save(self.actor.state_dict(), checkpoint_path)
 
-        return train_info
+    def load(self, checkpoint_path):
+        # self.policy_old.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
+        self.actor.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
+
+class CenPPO:
+    def __init__(self, state_dim, action_dim, n_agents, args):
+
+        self.continuous = args.continuous
+
+        if self.continuous:
+            self.action_std = 0.6
+
+        self.n_agents = n_agents
+        self.action_dim = action_dim
+        self.state_dim = state_dim
+        self.gamma = args.gamma
+        self.eps_clip = args.eps_clip
+        self.K_epochs = args.k_epochs
+        self.args = args
+        self.buffer = PPO_RolloutBuffer()
+        # Networks
+        if args.algo == "tarmac":
+            from network.tarmac import Actor, Critic
+        elif args.algo == "commnet":
+            from network.commnet import Actor, Critic
+        else:
+            from network.tarmac import Actor, Critic
+        self.actor = Actor(state_dim, action_dim, args)  # Actor(s_dim, a_dim, n_agents)
+        self.critic = Critic(self.n_agents, state_dim, action_dim, args)
+        self.old_actor = Actor(state_dim, action_dim, args)
+        self.actor.to(device)
+        self.critic.to(device)
+        self.old_actor.to(device)
+
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.args.a_lr)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=self.args.c_lr)
+
+        self.MseLoss = nn.MSELoss()
+
+    def set_action_std(self, new_action_std):
+        if self.continuous:
+            self.action_std = new_action_std
+            self.actor.set_action_std(new_action_std)
+            self.old_actor.set_action_std(new_action_std)
+        else:
+            print("--------------------------------------------------------------------------------------------")
+            print("WARNING : Calling PPO::set_action_std() on discrete action space policy")
+            print("--------------------------------------------------------------------------------------------")
+
+    def decay_action_std(self, action_std_decay_rate, min_action_std):
+        print("--------------------------------------------------------------------------------------------")
+        if self.continuous:
+            self.action_std = self.action_std - action_std_decay_rate
+            self.action_std = round(self.action_std, 4)
+            if (self.action_std <= min_action_std):
+                self.action_std = min_action_std
+                print("setting actor output action_std to min_action_std : ", self.action_std)
+            else:
+                print("setting actor output action_std to : ", self.action_std)
+            self.set_action_std(self.action_std)
+
+        else:
+            print("WARNING : Calling PPO::decay_action_std() on discrete action space policy")
+        print("--------------------------------------------------------------------------------------------")
+
+    def select_action(self, state):
+
+        if self.continuous:
+            with torch.no_grad():
+                state = torch.FloatTensor(state).to(device)
+                action, action_logprob = self.old_actor.act(state)
+
+            self.buffer.states.append(state)
+            self.buffer.actions.append(action)
+            self.buffer.logprobs.append(action_logprob)
+
+            return action.detach().cpu().numpy().flatten()
+        else:
+            with torch.no_grad():
+                state = torch.FloatTensor(state).to(device)
+                action, action_logprob = self.old_actor.act(state)
+
+            self.buffer.states.append(state)
+            self.buffer.actions.append(action)
+            self.buffer.logprobs.append(action_logprob)
+
+            return action.item()
+
+    def evaluate(self, state, action):
+
+        if self.continuous:
+            action_mean = self.actor(state)
+
+            action_var = self.actor.action_var.expand_as(action_mean)
+            cov_mat = torch.diag_embed(action_var).to(device)
+            dist = MultivariateNormal(action_mean, cov_mat)
+
+            # For Single Action Environments.
+            if self.actor.action_dim == 1:
+                action = action.reshape(-1, self.action_dim)
+        else:
+            action_probs = self.actor(state)
+            dist = Categorical(action_probs)
+        action_logprobs = dist.log_prob(action)
+        dist_entropy = dist.entropy()
+        state_values = self.critic(state)
+
+        return action_logprobs, state_values, dist_entropy
+
+    def update(self):
+        # Monte Carlo estimate of returns
+        rewards = []
+        discounted_reward = 0
+        for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
+            if is_terminal:
+                discounted_reward = 0
+            discounted_reward = reward + (self.gamma * discounted_reward)
+            rewards.insert(0, discounted_reward)
+
+        # Normalizing the rewards
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
+        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
+
+        # convert list to tensor
+        old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(device)
+        old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(device)
+        old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(device)
+
+        # Optimize policy for K epochs
+        for _ in range(self.K_epochs):
+            # Evaluating old actions and values
+            logprobs, state_values, dist_entropy = self.evaluate(old_states, old_actions)
+
+            # match state_values tensor dimensions with rewards tensor
+            state_values = torch.squeeze(state_values)
+
+            # Finding the ratio (pi_theta / pi_theta__old)
+            ratios = torch.exp(logprobs - old_logprobs.detach())
+
+            # Finding Surrogate Loss
+            advantages = rewards - state_values.detach()
+            surr1 = ratios * advantages
+            surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages
+
+            # actor loss
+            action_loss = -torch.min(surr1, surr2).mean()  # MAX->MIN desent
+            self.actor_optimizer.zero_grad()
+            action_loss.backward()
+            nn.utils.clip_grad_norm_(self.actor.parameters(), self.args.grad_norm)
+            self.actor_optimizer.step()
+
+            # critic loss
+            value_loss = 0.5 * self.MseLoss(state_values, rewards)
+            self.critic_optimizer.zero_grad()
+            value_loss.backward()
+            nn.utils.clip_grad_norm_(self.critic.parameters(), self.args.grad_norm)
+            self.critic_optimizer.step()
+            # final loss of clipped objective PPO
+        # clear buffer
+        self.buffer.clear()
+
+    def save(self, checkpoint_path):
+        torch.save(self.actor.state_dict(), checkpoint_path)
+
+    def load(self, checkpoint_path):
+        # self.policy_old.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
+        self.actor.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))

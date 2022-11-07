@@ -217,7 +217,7 @@ class Cen_DDPG:
         self.critic_target.to(self.device)
 
         self.actor_optimizer = torch.optim.RMSprop(self.actor.parameters(), lr=self.args.a_lr)
-        self.critic_optimizer = torch.optim.RMSprop(self.critic.parameters(), lr=self.args.a_lr)
+        self.critic_optimizer = torch.optim.RMSprop(self.critic.parameters(), lr=self.args.c_lr)
 
         self.replay_buffer = list()
         self.epsilon = 1.
