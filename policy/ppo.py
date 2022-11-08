@@ -518,7 +518,6 @@ class MAPPO_GRF:
         # Optimize policy for K epochs
         for _ in range(self.K_epochs):
             # Evaluating old actions and values
-            for i in range(self.n_agents):
             logprobs, state_values, dist_entropy = self.evaluate_value(old_states, old_actions, old_action_onehot)
 
             # match state_values tensor dimensions with rewards tensor

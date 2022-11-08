@@ -497,6 +497,7 @@ class gfoot_qmix:
         if train_step > 0 and train_step % self.args.target_update_cycle == 0:
             self.target_rnn.load_state_dict(self.eval_rnn.state_dict())
             self.target_qmix_net.load_state_dict(self.eval_qmix_net.state_dict())
+        return loss.item()
 
     def _get_inputs(self, batch, transition_idx):
         # 取出所有episode上该transition_idx的经验，u_onehot要取出所有，因为要用到上一条
@@ -585,26 +586,14 @@ class gfoot_qmix:
         self.init_hidden(1)
         # done = False
         obs, state, ava = self.env.reset()
-        o.append(obs)
-        s.append(np.array(state).flatten())
+        o.append(obs[1:])
+        s.append(np.array(state)[1:].flatten())
         # epsilon
         epsilon = 0 if evaluate else self.epsilon
         if self.args.epsilon_anneal_scale == 'episode':
             epsilon = epsilon - self.anneal_epsilon if epsilon > self.min_epsilon else epsilon
 
         while not terminated and step < self.args.episode_limit:
-            # time.sleep(0.2)
-            # check_obs = self.env.observation()
-            # cc, aa = tranf_obs(check_obs, self.feature_encoder)
-            # observation = self.env.observation()[1:self.args.n_agents+1]
-            # obs, ava_actions = tranf_obs(observation, self.feature_encoder)
-            # # self.env.render()
-            # # obs = obs.squeeze()
-            # # obs = self.feature_encoder.encode(observation)
-            # # obs = football_observation_wrapper(observation)
-            # # obs = self.env.observation(observation)
-            # # aa = [-i-1 for i in range(self.n_agents*2)]
-            # state = obs.flatten()
             actions, actions_onehot = [], []
             for agent_id in range(self.n_agents):
                 # avail_action = self.env.get_avail_agent_actions(agent_id)
@@ -616,9 +605,9 @@ class gfoot_qmix:
                 actions_onehot.append(action_onehot)
                 # avail_actions.append(avail_action)
                 last_action[agent_id] = action_onehot
-            # all_actions = deepcopy(actions)
-            # all_actions.insert(0, 0)
-            obs, state, rewards, dones, infos, ava = self.env.step(actions)
+            all_actions = deepcopy(actions)
+            all_actions.insert(0, 0)
+            obs, state, rewards, dones, infos, ava = self.env.step(all_actions)
             terminated = True if True in dones else False
             # if done:
             #     print('debug here')
@@ -631,11 +620,11 @@ class gfoot_qmix:
             for value in infos:
                 if value['score_reward'] > 0:
                     win_tag = True
-            o.append(obs)
-            s.append(np.array(state).flatten())
+            o.append(obs[1:])
+            s.append(np.array(state)[1:].flatten())
             u.append(np.reshape(actions, [self.n_agents, 1]))
             u_onehot.append(actions_onehot)
-            avail_u.append(ava)
+            avail_u.append(ava[1:])
             step += 1
             r.append([np.sum(rewards)])
             terminate.append([terminated])
@@ -670,8 +659,10 @@ class gfoot_qmix:
                 actions_onehot.append(action_onehot)
                 # avail_actions.append(avail_action)
                 last_action[agent_id] = action_onehot
-
-            obs, state, rewards, dones, infos, ava = self.env.step(actions)
+            all_actions = deepcopy(actions)
+            all_actions.insert(0, 0)
+            obs, state, rewards, dones, infos, ava = self.env.step(all_actions)
+            ava = ava[1:]
         else:
             ava = np.zeros([self.args.n_agents, self.args.n_actions])
             # avail_actions.append(ava)
@@ -761,9 +752,10 @@ class gfoot_qmix:
         for key in batch.keys():
             if key != 'z':
                 batch[key] = batch[key][:, :max_episode_len]
-        self.learn(batch, max_episode_len, train_step, epsilon)
+        loss = self.learn(batch, max_episode_len, train_step, epsilon)
         if train_step > 0 and train_step % self.args.save_cycle == 0:
             self.save_model(train_step)
+        return loss
 
     def _get_max_episode_len(self, batch):
         terminated = batch['terminated']

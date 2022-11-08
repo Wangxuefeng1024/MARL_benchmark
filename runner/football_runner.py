@@ -82,23 +82,22 @@ def main(args):
         episodes.append(episode)
         time_steps += steps
 
-        if args.algo != "mappo":
-            episode_batch = episodes[0]
-            total_rewards = np.sum(episode_batch['r'])
+        # if args.algo != "mappo":
+        episode_batch = episodes[0]
+        total_rewards = np.sum(episode_batch['r'])
 
-            episodes.pop(0)
-            for episode in episodes:
-                for key in episode_batch.keys():
-                    episode_batch[key] = np.concatenate((episode_batch[key], episode[key]), axis=0)
+        episodes.pop(0)
+        for episode in episodes:
+            for key in episode_batch.keys():
+                episode_batch[key] = np.concatenate((episode_batch[key], episode[key]), axis=0)
             # if args.algo != "mappo":
-            model.buffer.store_episode(episode_batch)
-        else:
-            total_rewards = torch.sum(torch.stack(model.buffer.rewards)).item()
+        model.buffer.store_episode(episode_batch)
         writer.add_scalar(tag='agent/rewards', global_step=time_steps, scalar_value=total_rewards)
         for train_step in range(args.train_steps):
             if args.algo != "mappo":
                 mini_batch = model.buffer.sample(min(model.buffer.current_size, model.args.batch_size))
-                model.train(mini_batch, train_steps)
+                loss = model.train(mini_batch, train_steps)
+                writer.add_scalar(tag='agent/loss', global_step=time_steps, scalar_value=loss)
             if args.algo == "mappo":
                 model.train()
             train_steps += 1
@@ -130,7 +129,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=123, help='random seed')
     # parser.add_argument('--state_shape', type=int, default=230, help='dimension of global state')
     # parser.add_argument('--obs_shape', type=int, default=115, help='dimension of local observation')
-    parser.add_argument('--episode_limit', type=int, default=150, help='episode_limit')
+    parser.add_argument('--episode_limit', type=int, default=200, help='episode_limit')
 
     parser.add_argument('--rnn_hidden_dim', type=int, default=64, help='rnn dimension')
     parser.add_argument('--n_actions', type=int, default=19, help='number of actions')
