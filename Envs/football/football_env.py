@@ -15,11 +15,18 @@ class FootballEnv(MultiAgentEnv):
     def __init__(self, args):
         super().__init__(args)
         self.scenario = args.scenario
+
         self.n_agents = args.n_agents
         self.reward_type = args.reward
+        # you have to add one more agent here, because the goal keeper is the first agent which we want to ignore.
         self.env = football_env.create_environment(env_name=self.scenario,
-                                                   number_of_left_players_agent_controls=self.n_agents,
+                                                   number_of_left_players_agent_controls=self.n_agents+1,
                                                    representation="raw",
+                                                   write_video=True,
+                                                   logdir='E:/meeting_files/39',
+                                                   dump_frequency=1000,
+                                                   # write_goal_dumps='aa',
+                                                   write_full_episode_dumps=True,
                                                    # representation="simple115v2",
                                                    rewards=self.reward_type)
         self.feature_encoder = FeatureEncoder()

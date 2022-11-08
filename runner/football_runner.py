@@ -68,15 +68,15 @@ def main(args):
         episodes = []
         # evaluate 20 episodes after training every 100 episodes
         #
-        if time_steps // args.evaluate_cycle > evaluate_steps:
-            win_rate, episode_reward = model.evaluate()
-            model.win_rates.append(win_rate)
-            model.episode_rewards.append(episode_reward)
-            evaluate_steps += 1
-            print('win rates is:', win_rate)
-            if args.tensorboard:
-                writer.add_scalar(tag='agent/win rates', global_step=train_steps, scalar_value=win_rate)
-                writer.add_scalar(tag='agent/reward', global_step=train_steps, scalar_value=episode_reward)
+        # if time_steps // args.evaluate_cycle > evaluate_steps:
+        #     win_rate, episode_reward = model.evaluate()
+        #     model.win_rates.append(win_rate)
+        #     model.episode_rewards.append(episode_reward)
+        #     evaluate_steps += 1
+        #     print('win rates is:', win_rate)
+        #     if args.tensorboard:
+        #         writer.add_scalar(tag='agent/win rates', global_step=train_steps, scalar_value=win_rate)
+        #         writer.add_scalar(tag='agent/reward', global_step=train_steps, scalar_value=episode_reward)
 
         episode, _, _, steps = model.generate_episode(train_steps)
         episodes.append(episode)
@@ -144,7 +144,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_steps', type=int, default=1, help='random seed')
     parser.add_argument('--rnn_hidden_size', type=int, default=64, help='random seed')
 
-    parser.add_argument('--algo', type=str, default='mappo', help='the algorithm to train the agent')
+    parser.add_argument('--algo', type=str, default='qmix', help='the algorithm to train the agent')
 
     parser.add_argument('--max_steps', type=int, default=10000000, help='total time steps')
     parser.add_argument('--n_episodes', type=int, default=1, help='the number of episodes before once training')
@@ -152,7 +152,7 @@ if __name__ == '__main__':
     parser.add_argument('--reuse_network', type=bool, default=True, help='whether to use one network for all agents')
     parser.add_argument('--tensorboard', type=bool, default=True, help='whether to use tensorboard')
     parser.add_argument('--gamma', type=float, default=0.99, help='discount factor')
-    parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
+    parser.add_argument('--lr', type=float, default=2e-4, help='learning rate')
     parser.add_argument('--c_lr', type=float, default=1e-4, help='critic learning rate')
     parser.add_argument('--a_lr', type=float, default=1e-4, help='actor learning rate')
     parser.add_argument('--grad_norm', type=float, default=1, help='actor learning rate')

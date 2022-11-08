@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import os
 import numpy as np
+from copy import deepcopy
 # import torch.nn.functional as F
 from torch.distributions import MultivariateNormal
 from torch.distributions import Categorical
@@ -358,7 +359,8 @@ class MAPPO_GRF:
     def __init__(self, env, args):
 
         self.continuous = args.continuous
-
+        self.win_rates = []
+        self.episode_rewards = []
         if self.continuous:
             self.action_std = 0.6
         self.env = env
@@ -516,6 +518,7 @@ class MAPPO_GRF:
         # Optimize policy for K epochs
         for _ in range(self.K_epochs):
             # Evaluating old actions and values
+            for i in range(self.n_agents):
             logprobs, state_values, dist_entropy = self.evaluate_value(old_states, old_actions, old_action_onehot)
 
             # match state_values tensor dimensions with rewards tensor
@@ -626,6 +629,7 @@ class MAPPO_GRF:
             # state = obs.flatten()
             actions, actions_onehot, log_action = [], [], []
             for agent_id in range(self.n_agents):
+
                 # avail_action = self.env.get_avail_agent_actions(agent_id)
                 action, action_log = self.select_action(obs[agent_id], ava[agent_id])
                 # generate onehot vector of th action
@@ -636,11 +640,11 @@ class MAPPO_GRF:
                 actions_onehot.append(torch.from_numpy(action_onehot).to(device))
                 # avail_actions.append(avail_action)
                 last_action[agent_id] = action_onehot
-            # all_actions = deepcopy(actions)
-            # all_actions.insert(0, 0)
-            self.buffer.states.append(torch.tensor(obs).to(device))
-
-            obs, state, rewards, dones, infos, ava = self.env.step(actions)
+            all_actions = deepcopy(actions)
+            all_actions.insert(0, 0)
+            self.buffer.states.append(torch.tensor(obs[1:]).to(device))
+            # self.env.env.env.render()
+            obs, state, rewards, dones, infos, ava = self.env.step(all_actions)
             terminated = True if True in dones else False
             # if done:
             #     print('debug here')
