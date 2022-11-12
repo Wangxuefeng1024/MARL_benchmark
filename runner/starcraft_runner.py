@@ -1,6 +1,6 @@
 from policy.qmix import QMIX
 from policy.vdn import VDN
-from policy.wqmix import WQMIX
+# from policy.wqmix import WQMIX
 from tensorboardX import SummaryWriter
 from smac.env import StarCraft2Env
 import torch
@@ -13,7 +13,7 @@ def main(args):
     torch.manual_seed(args.seed)
     if args.tensorboard:
         writer = SummaryWriter(
-            log_dir='runs/' + args.algo + "/" + str(
+            log_dir='../runs/' +'starcraft/'+ args.algo + "/" + str(
                 args.n_agents) + args.reminder)
 
     env = StarCraft2Env(map_name=args.map,
@@ -24,16 +24,16 @@ def main(args):
     env_info = env.get_env_info()
     args.n_actions = env_info["n_actions"]
     args.n_agents = env_info["n_agents"]
-    args.state_shape = env_info["state_shape"]
-    args.obs_shape = env_info["obs_shape"]
+    args.n_states = env_info["state_shape"]
+    args.n_obs = env_info["obs_shape"]
     args.episode_limit = env_info["episode_limit"]
 
     if args.algo == "qmix":
         model = QMIX(env, args)
     elif args.algo == "vdn":
         model = VDN(env, args)
-    elif args.algo == "wqmix":
-        model = WQMIX(env, args)
+    # elif args.algo == "wqmix":
+    #     model = WQMIX(env, args)
     else:
         model = QMIX(env, args)
     print(model)
@@ -45,7 +45,6 @@ def main(args):
     while time_steps < args.max_steps:
         print('time_steps {}'.format(time_steps))
         # evaluate 20 episodes after training every 100 episodes
-        # o, s, u, u_onehot, avail_u, r, terminate, padded = [], [], [], [], [], [], [], []
         if time_steps // args.evaluate_cycle > evaluate_steps:
             win_rate, episode_reward = model.evaluate()
             model.win_rates.append(win_rate)
@@ -69,9 +68,10 @@ def main(args):
         model.buffer.store_episode(episode_batch)
         for train_step in range(args.train_steps):
             mini_batch = model.buffer.sample(min(model.buffer.current_size, model.args.batch_size))
-            model.train(mini_batch, train_steps)
+            loss = model.train(mini_batch, train_steps)
+            writer.add_scalar(tag='agent/loss', global_step=evaluate_steps, scalar_value=loss.item())
             train_steps += 1
-        # if episode_id % args.save_cycle == 0:
+        # if train_steps % args.save_cycle == 0:
         #     model.save_model(train_steps)
     win_rate, episode_reward = model.evaluate()
     print('win_rate is ', win_rate)

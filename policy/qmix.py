@@ -2,13 +2,10 @@ import torch
 import os
 from copy import deepcopy
 from Algos.qmix.network import DRQN, QMixNet
-from Utils.gf_memory import gf_ReplayBuffer
 from Utils.sc_memory import ReplayBuffer
 import numpy as np
 from torch.distributions import Categorical
-from Utils.utils import tranf_obs
 from Utils.encoder_basic import FeatureEncoder
-from Utils.rewarder_basic import calc_reward
 
 class QMIX:
     def __init__(self, env, args):
@@ -16,8 +13,8 @@ class QMIX:
         self.args = args
         self.n_actions = args.n_actions
         self.n_agents = args.n_agents
-        self.state_shape = args.state_shape
-        self.obs_shape = args.obs_shape
+        self.state_shape = args.n_states
+        self.obs_shape = args.n_obs
         self.epsilon = args.epsilon
         self.anneal_epsilon = args.anneal_epsilon
         self.min_epsilon = args.min_epsilon
@@ -122,6 +119,7 @@ class QMIX:
         if train_step > 0 and train_step % self.args.target_update_cycle == 0:
             self.target_rnn.load_state_dict(self.eval_rnn.state_dict())
             self.target_qmix_net.load_state_dict(self.eval_qmix_net.state_dict())
+        return loss
 
     def _get_inputs(self, batch, transition_idx):
         # 取出所有episode上该transition_idx的经验，u_onehot要取出所有，因为要用到上一条
@@ -225,7 +223,7 @@ class QMIX:
             for agent_id in range(self.n_agents):
                 avail_action = self.env.get_avail_agent_actions(agent_id)
                 action = self.choose_action(obs[agent_id], last_action[agent_id], agent_id,
-                                                   avail_action, epsilon, evaluate)
+                                                   avail_action, epsilon)
                 # generate onehot vector of th action
                 action_onehot = np.zeros(self.args.n_actions)
                 action_onehot[action] = 1
@@ -303,7 +301,7 @@ class QMIX:
             self.env.close()
         return episode, episode_reward, win_tag, step
 
-    def choose_action(self, obs, last_action, agent_num, avail_actions, epsilon, maven_z=None, evaluate=False):
+    def choose_action(self, obs, last_action, agent_num, avail_actions, epsilon):
         inputs = obs.copy()
         avail_actions_ind = np.nonzero(avail_actions)[0]  # index of actions which can be choose
 
@@ -344,9 +342,10 @@ class QMIX:
         for key in batch.keys():
             if key != 'z':
                 batch[key] = batch[key][:, :max_episode_len]
-        self.learn(batch, max_episode_len, train_step, epsilon)
+        loss = self.learn(batch, max_episode_len, train_step, epsilon)
         if train_step > 0 and train_step % self.args.save_cycle == 0:
             self.save_model(train_step)
+        return loss
 
     def _get_max_episode_len(self, batch):
         terminated = batch['terminated']
@@ -403,10 +402,10 @@ class gfoot_qmix:
         self.buffer = ReplayBuffer(args)
         self.save_path = self.args.result_dir + '/' + args.algo + '/' + args.map
         # 根据参数决定RNN的输入维度
-        # if args.last_action:
-        #     input_shape += self.n_actions
-        # if args.reuse_network:
-        #     input_shape += self.n_agents
+        if args.last_action:
+            input_shape += self.n_actions
+        if args.reuse_network:
+            input_shape += self.n_agents
         # 神经网络
         self.eval_rnn = DRQN(input_shape, args)  # 每个agent选动作的网络
         self.target_rnn = DRQN(input_shape, args)
@@ -417,7 +416,7 @@ class gfoot_qmix:
             self.target_rnn.cuda()
             self.eval_qmix_net.cuda()
             self.target_qmix_net.cuda()
-        self.model_dir = args.model_dir + '/' + args.algo + '/' + args.map
+        self.model_dir = args.model_dir + '/' + args.algo + '/' + args.scenario
         # 如果存在模型则加载模型
         if self.args.load_model:
             if os.path.exists(self.model_dir + '/rnn_net_params.pkl'):
@@ -444,7 +443,7 @@ class gfoot_qmix:
         self.target_hidden = None
         print('Init algo QMIX')
 
-    def learn(self, batch, max_episode_len, train_step, epsilon=None):  # train_step表示是第几次学习，用来控制更新target_net网络的参数
+    def learn(self, batch, max_episode_len, train_step):  # train_step表示是第几次学习，用来控制更新target_net网络的参数
         '''
         在learn的时候，抽取到的数据是四维的，四个维度分别为 1——第几个episode 2——episode中第几个transition
         3——第几个agent的数据 4——具体obs维度。因为在选动作时不仅需要输入当前的inputs，还要给神经网络输入hidden_state，
@@ -509,18 +508,19 @@ class gfoot_qmix:
         inputs_next.append(obs_next)
         # 给obs添加上一个动作、agent编号
 
-        # if self.args.last_action:
-        #     if transition_idx == 0:  # 如果是第一条经验，就让前一个动作为0向量
-        #         inputs.append(torch.zeros_like(u_onehot[:, transition_idx]))
-        #     else:
-        #         inputs.append(u_onehot[:, transition_idx - 1])
-        #     inputs_next.append(u_onehot[:, transition_idx])
-        # if self.args.reuse_network:
-        #     # 因为当前的obs三维的数据，每一维分别代表(episode编号，agent编号，obs维度)，直接在dim_1上添加对应的向量
-        #     # 即可，比如给agent_0后面加(1, 0, 0, 0, 0)，表示5个agent中的0号。而agent_0的数据正好在第0行，那么需要加的
-        #     # agent编号恰好就是一个单位矩阵，即对角线为1，其余为0
-        #     inputs.append(torch.eye(self.args.n_agents).unsqueeze(0).expand(episode_num, -1, -1))
-        #     inputs_next.append(torch.eye(self.args.n_agents).unsqueeze(0).expand(episode_num, -1, -1))
+        if self.args.last_action:
+            if transition_idx == 0:  # 如果是第一条经验，就让前一个动作为0向量
+                inputs.append(torch.zeros_like(u_onehot[:, transition_idx]))
+            else:
+                inputs.append(u_onehot[:, transition_idx - 1])
+            inputs_next.append(u_onehot[:, transition_idx])
+
+        if self.args.reuse_network:
+            # 因为当前的obs三维的数据，每一维分别代表(episode编号，agent编号，obs维度)，直接在dim_1上添加对应的向量
+            # 即可，比如给agent_0后面加(1, 0, 0, 0, 0)，表示5个agent中的0号。而agent_0的数据正好在第0行，那么需要加的
+            # agent编号恰好就是一个单位矩阵，即对角线为1，其余为0
+            inputs.append(torch.eye(self.args.n_agents).unsqueeze(0).expand(episode_num, -1, -1))
+            inputs_next.append(torch.eye(self.args.n_agents).unsqueeze(0).expand(episode_num, -1, -1))
         # 要把obs中的三个拼起来，并且要把episode_num个episode、self.args.n_agents个agent的数据拼成40条(40,96)的数据，
         # 因为这里所有agent共享一个神经网络，每条数据中带上了自己的编号，所以还是自己的数据
         inputs = torch.cat([x.reshape(episode_num * self.args.n_agents, -1) for x in inputs], dim=1)
@@ -577,7 +577,6 @@ class gfoot_qmix:
         if self.args.replay_dir != '' and evaluate and episode_num == 0:  # prepare for save replay of evaluation
             self.env.close()
         o, u, r, s, avail_u, u_onehot, terminate, padded = [], [], [], [], [], [], [], []
-        # self.env.reset()
         terminated = False
         win_tag = False
         step = 0
@@ -596,27 +595,17 @@ class gfoot_qmix:
         while not terminated and step < self.args.episode_limit:
             actions, actions_onehot = [], []
             for agent_id in range(self.n_agents):
-                # avail_action = self.env.get_avail_agent_actions(agent_id)
-                action = self.choose_action(obs[agent_id], ava[agent_id], agent_id, epsilon)
-                # generate onehot vector of th action
+                action = self.choose_action(obs[agent_id], ava[agent_id], last_action[agent_id], agent_id, epsilon)
+                # generate onehot vector of each action
                 action_onehot = np.zeros(self.args.n_actions)
                 action_onehot[action] = 1
                 actions.append(np.int(action))
                 actions_onehot.append(action_onehot)
-                # avail_actions.append(avail_action)
                 last_action[agent_id] = action_onehot
             all_actions = deepcopy(actions)
             all_actions.insert(0, 0)
             obs, state, rewards, dones, infos, ava = self.env.step(all_actions)
             terminated = True if True in dones else False
-            # if done:
-            #     print('debug here')
-            # next_obs = next_obs[1:self.args.n_agents+1]
-            # rewards = calc_reward(reward, observation[0], next_obs[0], step)
-
-            # rewards = sum(rewards)
-            # next_obs = football_observation_wrapper(next_obs)
-            # reward = football_reward_wrapper(next_obs, reward)
             for value in infos:
                 if value['score_reward'] > 0:
                     win_tag = True
@@ -633,31 +622,22 @@ class gfoot_qmix:
 
             if self.args.epsilon_anneal_scale == 'step':
                 epsilon = epsilon - self.anneal_epsilon if epsilon > self.min_epsilon else epsilon
-            # not win_tag and step < self.args.episode_limit:
-        # last obs
-        # obs = self.env.observation()[1:self.args.n_agents+1]
-        # obs, ava_actions = tranf_obs(obs, self.feature_encoder)
-        # obs = obs.squeeze()
-        # state = obs.flatten()
-        # o.append(obs)
-        # s.append(state)
+
+        # split obs, obs_next, state, next_state
         o_next = o[1:]
         s_next = s[1:]
         o = o[:-1]
         s = s[:-1]
         # get avail_action for last obs，because target_q needs avail_action in training
-        # avail_actions = []
         if not terminated:
             actions, actions_onehot = [], []
             for agent_id in range(self.n_agents):
-                # avail_action = self.env.get_avail_agent_actions(agent_id)
-                action = self.choose_action(obs[agent_id], ava[agent_id], agent_id, epsilon)
+                action = self.choose_action(obs[agent_id], ava[agent_id], last_action[agent_id], agent_id, epsilon)
                 # generate onehot vector of th action
                 action_onehot = np.zeros(self.args.n_actions)
                 action_onehot[action] = 1
                 actions.append(np.int(action))
                 actions_onehot.append(action_onehot)
-                # avail_actions.append(avail_action)
                 last_action[agent_id] = action_onehot
             all_actions = deepcopy(actions)
             all_actions.insert(0, 0)
@@ -666,8 +646,6 @@ class gfoot_qmix:
         else:
             ava = np.zeros([self.args.n_agents, self.args.n_actions])
             # avail_actions.append(ava)
-        # observation = self.env.observation()[1:self.args.n_agents + 1]
-        # obs, ava_actions = tranf_obs(observation, self.feature_encoder)
         avail_u.append(ava)
         avail_u_next = avail_u[1:]
         avail_u = avail_u[:-1]
@@ -710,7 +688,7 @@ class gfoot_qmix:
             self.env.close()
         return episode, episode_reward, win_tag, step
 
-    def choose_action(self, obs, ava_actions, agent_num, epsilon):
+    def choose_action(self, obs, ava_actions,last_action, agent_num, epsilon):
         inputs = obs.copy()
         avail_actions_ind = np.nonzero(ava_actions)[0]  # index of actions which can be choose
 
@@ -718,25 +696,22 @@ class gfoot_qmix:
         agent_id = np.zeros(self.n_agents)
         agent_id[agent_num] = 1.
 
-        # if self.args.last_action:
-        #     inputs = np.hstack((inputs, last_action))
-        # if self.args.reuse_network:
-        #     inputs = np.hstack((inputs, agent_id))
+        if self.args.last_action:
+            inputs = np.hstack((inputs, last_action))
+        if self.args.reuse_network:
+            inputs = np.hstack((inputs, agent_id))
         hidden_state = self.eval_hidden[:, agent_num, :]
 
         # transform the shape of inputs from (42,) to (1,42)
         inputs = torch.tensor(inputs, dtype=torch.float32).unsqueeze(0)
-        # avail_actions = torch.tensor(avail_actions, dtype=torch.float32).unsqueeze(0)
         if self.args.cuda:
             inputs = inputs.cuda()
             hidden_state = hidden_state.cuda()
 
         # get q value
-
         q_value, self.eval_hidden[:, agent_num, :] = self.eval_rnn(inputs, hidden_state)
 
         # choose action from q value
-        # ava_actions = ava_actions.unsqueeze(0)
         q_value = q_value.squeeze()
         q_value[ava_actions == 0.0] = - float("inf")
         if np.random.uniform() < epsilon:
@@ -752,7 +727,7 @@ class gfoot_qmix:
         for key in batch.keys():
             if key != 'z':
                 batch[key] = batch[key][:, :max_episode_len]
-        loss = self.learn(batch, max_episode_len, train_step, epsilon)
+        loss = self.learn(batch, max_episode_len, train_step)
         if train_step > 0 and train_step % self.args.save_cycle == 0:
             self.save_model(train_step)
         return loss

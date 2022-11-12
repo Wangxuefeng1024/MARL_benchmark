@@ -3,9 +3,6 @@ from tensorboardX import SummaryWriter
 from Envs.football.football_env import FootballEnv
 from policy.qmix import gfoot_qmix
 from policy.ppo import MAPPO_GRF
-# from Algos.iql.iql_agent import IQL
-# from Algos.coma.coma_agent import COMA
-# from Algos.TarMAC.tarmac_agent import gfoot_TarMAC, MAPPO
 import argparse
 import numpy as np
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -16,9 +13,9 @@ def main(args):
     torch.manual_seed(args.seed)
     if args.tensorboard:
         writer = SummaryWriter(
-            log_dir='runs/' + args.algo + "/" + args.scenario)
+            log_dir='../runs/' + args.algo + "/" + args.scenario)
     # create environments
-    # set the number of agents by the sceanrio
+    # set the number of agents of the scenario
     if args.scenario in ['academy_pass_and_shoot_with_keeper', 'academy_run_pass_and_shoot_with_keeper']:
         args.n_agents = 2
         args.obs_shape = 98
@@ -33,41 +30,23 @@ def main(args):
         args.obs_shape = 115
         args.n_states = args.obs_shape*args.n_agents
 
-    # args.n_states = 29
-    # args.obs_shape = 33
-
     env = FootballEnv(args=args)
     # create model
     if args.algo == "qmix":
         model = gfoot_qmix(env, args)
-    # elif args.algo == "iql":
-    #     model = IQL(env, args)
-    # elif args.algo == "coma":
-    #     model = COMA(env, args)
-    # elif args.algo == "tarmac":
-    #     model = gfoot_TarMAC(env, args)
+
     elif args.algo == "mappo":
         model = MAPPO_GRF(env, args)
-    # else:
-    #     model = gfoot_qmix(env, args)
+    else:
+        model = gfoot_qmix(env, args)
     print(model)
-
-
-
-    # get the whole rollout now
-    # we utilize on-policy ppo or dqn now, for the dqn we are sample the whole episodes to the replay buffer
-    # episode_id = 0
-    # train_steps = 0
-    total_step = 0
 
     time_steps, train_steps, evaluate_steps = 0, 0, -1
     total_rewards = 0
     while time_steps < args.max_steps:
         print("[time_steps %05d] reward %6.4f" % (time_steps, total_rewards))
-
         episodes = []
         # evaluate 20 episodes after training every 100 episodes
-        #
         # if time_steps // args.evaluate_cycle > evaluate_steps:
         #     win_rate, episode_reward = model.evaluate()
         #     model.win_rates.append(win_rate)
@@ -81,16 +60,12 @@ def main(args):
         episode, _, _, steps = model.generate_episode(train_steps)
         episodes.append(episode)
         time_steps += steps
-
-        # if args.algo != "mappo":
         episode_batch = episodes[0]
         total_rewards = np.sum(episode_batch['r'])
-
         episodes.pop(0)
         for episode in episodes:
             for key in episode_batch.keys():
                 episode_batch[key] = np.concatenate((episode_batch[key], episode[key]), axis=0)
-            # if args.algo != "mappo":
         model.buffer.store_episode(episode_batch)
         writer.add_scalar(tag='agent/rewards', global_step=time_steps, scalar_value=total_rewards)
         for train_step in range(args.train_steps):
