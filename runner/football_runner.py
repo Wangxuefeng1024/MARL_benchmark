@@ -16,14 +16,22 @@ def main(args):
             log_dir='../runs/' + args.algo + "/" + args.scenario)
     # create environments
     # set the number of agents of the scenario
-    if args.scenario in ['academy_pass_and_shoot_with_keeper', 'academy_run_pass_and_shoot_with_keeper']:
+    if args.scenario == 'academy_pass_and_shoot_with_keeper':
         args.n_agents = 2
         args.obs_shape = 98
         args.n_states = args.obs_shape*args.n_agents
+        args.episode_limit = 150
+
+    elif args.scenario == 'academy_run_pass_and_shoot_with_keeper':
+        args.n_agents = 2
+        args.obs_shape = 98
+        args.n_states = args.obs_shape*args.n_agents
+        args.episode_limit = 200
     elif args.scenario == 'academy_3_vs_1_with_keeper':
         args.n_agents = 3
         args.obs_shape = 105
         args.n_states = args.obs_shape*args.n_agents
+        args.episode_limit = 250
     else:
         args.n_agents = 2
 
@@ -47,15 +55,15 @@ def main(args):
         print("[time_steps %05d] reward %6.4f" % (time_steps, total_rewards))
         episodes = []
         # evaluate 20 episodes after training every 100 episodes
-        # if time_steps // args.evaluate_cycle > evaluate_steps:
-        #     win_rate, episode_reward = model.evaluate()
-        #     model.win_rates.append(win_rate)
-        #     model.episode_rewards.append(episode_reward)
-        #     evaluate_steps += 1
-        #     print('win rates is:', win_rate)
-        #     if args.tensorboard:
-        #         writer.add_scalar(tag='agent/win rates', global_step=train_steps, scalar_value=win_rate)
-        #         writer.add_scalar(tag='agent/reward', global_step=train_steps, scalar_value=episode_reward)
+        if time_steps // args.evaluate_cycle > evaluate_steps:
+            win_rate, episode_reward = model.evaluate()
+            model.win_rates.append(win_rate)
+            model.episode_rewards.append(episode_reward)
+            evaluate_steps += 1
+            print('win rates is:', win_rate)
+            if args.tensorboard:
+                writer.add_scalar(tag='agent/win rates', global_step=train_steps, scalar_value=win_rate)
+                writer.add_scalar(tag='agent/reward', global_step=train_steps, scalar_value=episode_reward)
 
         episode, _, _, steps = model.generate_episode(train_steps)
         episodes.append(episode)
@@ -96,15 +104,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # the environment setting
     parser.add_argument('--difficulty', type=str, default='5', help='the difficulty of the game')
-    parser.add_argument('--scenario', type=str, default='academy_pass_and_shoot_with_keeper', help='academy_pass_and_shoot_with_keeper, academy_run_pass_and_shoot_with_keeper, academy_3_vs_1_with_keeper')
+    parser.add_argument('--scenario', type=str, default='academy_3_vs_1_with_keeper', help='academy_pass_and_shoot_with_keeper, academy_run_pass_and_shoot_with_keeper, academy_3_vs_1_with_keeper')
     parser.add_argument('--reward', type=str, default='scoring', help='the map of the game')
 
     parser.add_argument('--game_version', type=str, default='latest', help='the version of the game')
     parser.add_argument('--map', type=str, default='5m_vs_6m', help='the map of the game')
     parser.add_argument('--seed', type=int, default=123, help='random seed')
-    # parser.add_argument('--state_shape', type=int, default=230, help='dimension of global state')
-    # parser.add_argument('--obs_shape', type=int, default=115, help='dimension of local observation')
-    parser.add_argument('--episode_limit', type=int, default=200, help='episode_limit')
 
     parser.add_argument('--rnn_hidden_dim', type=int, default=64, help='rnn dimension')
     parser.add_argument('--n_actions', type=int, default=19, help='number of actions')
@@ -135,7 +140,7 @@ if __name__ == '__main__':
     parser.add_argument('--clip_param', type=float, default=0.2, help='discount factor')
     parser.add_argument('--epsilon', type=float, default=1.0, help='discount factor')
     parser.add_argument('--lamda', type=float, default=0.95, help='discount factor')
-    parser.add_argument('--anneal_epsilon', type=float, default=0.000019, help='discount factor')
+    parser.add_argument('--anneal_epsilon', type=float, default=0.00004, help='discount factor')
     parser.add_argument('--min_epsilon', type=float, default=0.05, help='discount factor')
     parser.add_argument('--ppo_n_epochs', type=int, default=10, help='how often to evaluate the model')
     parser.add_argument('--optimizer', type=str, default="RMS", help='optimizer')

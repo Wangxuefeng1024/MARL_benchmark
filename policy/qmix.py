@@ -587,6 +587,7 @@ class gfoot_qmix:
         obs, state, ava = self.env.reset()
         o.append(obs[1:])
         s.append(np.array(state)[1:].flatten())
+
         # epsilon
         epsilon = 0 if evaluate else self.epsilon
         if self.args.epsilon_anneal_scale == 'episode':
@@ -595,7 +596,7 @@ class gfoot_qmix:
         while not terminated and step < self.args.episode_limit:
             actions, actions_onehot = [], []
             for agent_id in range(self.n_agents):
-                action = self.choose_action(obs[agent_id], ava[agent_id], last_action[agent_id], agent_id, epsilon)
+                action = self.choose_action(obs[agent_id+1], ava[agent_id+1], last_action[agent_id], agent_id, epsilon)
                 # generate onehot vector of each action
                 action_onehot = np.zeros(self.args.n_actions)
                 action_onehot[action] = 1
@@ -632,7 +633,7 @@ class gfoot_qmix:
         if not terminated:
             actions, actions_onehot = [], []
             for agent_id in range(self.n_agents):
-                action = self.choose_action(obs[agent_id], ava[agent_id], last_action[agent_id], agent_id, epsilon)
+                action = self.choose_action(obs[agent_id+1], ava[agent_id+1], last_action[agent_id], agent_id, epsilon)
                 # generate onehot vector of th action
                 action_onehot = np.zeros(self.args.n_actions)
                 action_onehot[action] = 1
