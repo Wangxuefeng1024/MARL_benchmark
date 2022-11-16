@@ -1,5 +1,6 @@
 from Envs.payoff_matrix.one_step_payoff_matrix import OneStepPayOffMatrix
 from Envs.payoff_matrix.two_step_payoff_matrix import TwoStepPayOffMatrix
+from Envs.payoff_matrix.two_state_payoff_matrix import TwoStatePayOffMatrix
 from policy.qmix import QMIX
 from policy.vdn import VDN
 import argparse
@@ -85,6 +86,13 @@ def play(self):
         q_value_list = [[0. for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
         iteration = [[0 for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
     elif self.args.env_name == 'two_step_payoff_matrix':
+        q_value_list_0 = [[0. for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
+        iteration_0 = [[0 for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
+        q_value_list_1 = [[0. for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
+        iteration_1 = [[0 for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
+        q_value_list_2 = [[0. for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
+        iteration_2 = [[0 for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
+    elif self.args.env_name == 'two_state_payoff_matrix':
         q_value_list_0 = [[0. for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
         iteration_0 = [[0 for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
         q_value_list_1 = [[0. for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
@@ -195,7 +203,7 @@ if __name__ == '__main__':
     # the environment setting
     parser.add_argument('--difficulty', type=str, default='5', help='the difficulty of the game')
     parser.add_argument('--game_version', type=str, default='latest', help='the version of the game')
-    parser.add_argument('--map', type=str, default='3m', help='the map of the game')
+    parser.add_argument('--env_name', type=str, default='two_state_payoff_matrix', help='two_state_payoff_matrix')
     parser.add_argument('--seed', type=int, default=123, help='random seed')
     parser.add_argument('--rnn_hidden_dim', type=int, default=64, help='rnn dimension')
     # parser.add_argument('--rnn_hidden_dim', type=int, default=64, help='rnn dimension')
@@ -206,9 +214,9 @@ if __name__ == '__main__':
     parser.add_argument('--n_agents', type=int, default=5, help='how many steps to make an action')
     parser.add_argument('--replay_dir', type=str, default='', help='absolute path to save the replay')
     parser.add_argument('--test_episodes', type=int, default=20, help='random seed')
-    parser.add_argument('--train_steps', type=int, default=1, help='random seed')
+    parser.add_argument('--training_steps', type=int, default=100000, help='random seed')
 
-    parser.add_argument('--algo', type=str, default='qmix', help='the algorithm to train the agent')
+    parser.add_argument('--algo', type=str, default='pac', help='the algorithm to train the agent')
 
     parser.add_argument('--max_steps', type=int, default=2000000, help='total time steps')
     parser.add_argument('--n_episodes', type=int, default=1, help='the number of episodes before once training')
@@ -242,5 +250,12 @@ if __name__ == '__main__':
     parser.add_argument('--cuda', type=bool, default=True, help='whether to use the GPU')
     parser.add_argument('--reminder', type=str, default="normal", help='something helps to remind')
     parser.add_argument('--epsilon_anneal_scale', type=str, default="step", help='something helps to remind')
+
+
+    parser.add_argument('--play', action='store_true',default=True)
+    # parser.add_argument('--algorithm', type=str, default='qmix')    # vdn, qmix
+    parser.add_argument('--optim', type=str, default='rms')  # rms, adam
+    parser.add_argument('--device', type=str, default='cpu')
+
     args = parser.parse_args()
-    main(args)
+    run(args)

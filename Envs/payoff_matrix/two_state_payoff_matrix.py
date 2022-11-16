@@ -3,7 +3,7 @@ import numpy as np
 # value_list1 = [4, -2, -2; -2, 0, 0; -2, 0, 0]
 # value_list2 = [-2, 0, 0; 4, -2, -2; -2, 0, 0]
 
-class OneStepPayOffMatrix:
+class TwoStatePayOffMatrix:
     def __init__(self, n=3, value_list=None):
         if value_list is None:
             value_list = [0. for _ in range(n*n)]

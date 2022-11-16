@@ -2,10 +2,12 @@ import torch
 import os
 from copy import deepcopy
 from Algos.qmix.network import DRQN, QMixNet
-from Utils.sc_memory import ReplayBuffer
+from utils.sc_memory import ReplayBuffer
 import numpy as np
 from torch.distributions import Categorical
-from Utils.encoder_basic import FeatureEncoder
+from utils.encoder_basic import FeatureEncoder
+import glob
+import random
 
 class QMIX:
     def __init__(self, env, args):
@@ -768,3 +770,318 @@ class gfoot_qmix:
         else:
             action = Categorical(prob).sample().long()
         return action
+
+
+class qmix_matrix:
+    def __init__(self, env, args):
+        self.env = env
+        self.args = args
+
+        assert self.args.base_net in ['mlp', 'rnn']
+        if self.args.base_net == 'mlp':
+            from utils.matrix_memory import ReplayMemoryForMLP
+            self.replay_memory = ReplayMemoryForMLP(self.args)
+        else:
+            from utils.matrix_memory import ReplayMemoryForRNN
+            self.replay_memory = ReplayMemoryForRNN(self.args)
+
+        self.training_steps = self.args.training_steps
+        self.playing_steps = self.args.playing_steps
+
+        self.n_actions = args.n_actions
+        self.n_agents = args.n_agents
+        self.state_shape = args.n_states
+        self.obs_shape = args.n_obs
+        self.epsilon = args.epsilon
+        self.anneal_epsilon = args.anneal_epsilon
+        self.min_epsilon = args.min_epsilon
+        self.episode_limit = args.episode_limit
+        input_shape = self.obs_shape
+        self.win_rates = []
+        self.episode_rewards = []
+        self.buffer = ReplayBuffer(args)
+        self.save_path = self.args.result_dir + '/' + args.algo + '/' + args.map
+        # 根据参数决定RNN的输入维度
+        if args.last_action:
+            input_shape += self.n_actions
+        if args.reuse_network:
+            input_shape += self.n_agents
+        # 神经网络
+        self.eval_rnn = DRQN(input_shape, args)  # 每个agent选动作的网络
+        self.target_rnn = DRQN(input_shape, args)
+        self.eval_qmix_net = QMixNet(args)  # 把agentsQ值加起来的网络
+        self.target_qmix_net = QMixNet(args)
+        if self.args.cuda:
+            self.eval_rnn.cuda()
+            self.target_rnn.cuda()
+            self.eval_qmix_net.cuda()
+            self.target_qmix_net.cuda()
+        self.model_dir = args.model_dir + '/' + args.algo + '/' + args.map
+        # 如果存在模型则加载模型
+        if self.args.load_model:
+            if os.path.exists(self.model_dir + '/rnn_net_params.pkl'):
+                path_actor = self.model_dir + '/rnn_net_params.pkl'
+                path_qmix = self.model_dir + '/qmix_net_params.pkl'
+                map_location = 'cuda:0' if self.args.cuda else 'cpu'
+                self.eval_rnn.load_state_dict(torch.load(path_actor, map_location=map_location))
+                self.eval_qmix_net.load_state_dict(torch.load(path_qmix, map_location=map_location))
+                print('Successfully load the model: {} and {}'.format(path_actor, path_qmix))
+            else:
+                raise Exception("No model!")
+
+    def init_hidden(self, episode_num):
+        # 为每个episode中的每个agent都初始化一个eval_hidden、target_hidden
+        self.eval_hidden = torch.zeros((episode_num, self.n_agents, self.args.rnn_hidden_dim))
+        self.target_hidden = torch.zeros((episode_num, self.n_agents, self.args.rnn_hidden_dim))
+
+    def choose_action(self, observation, h_in=None, state=None):
+        actions = []
+        q_evals = []
+        h_outs = []
+        for a in range(self.args.n_agents):
+            obs = observation[self.agents[a].agent_id]
+            obs = torch.from_numpy(obs).float()
+            obs = obs.unsqueeze(0)
+            if self.args.base_net == 'rnn':
+                _h_in = h_in[self.agents[a].agent_id]
+                _h_in = _h_in.unsqueeze(0)
+                q_eval, h_out = self.agents[a].get_q_value(obs, _h_in)
+                h_outs.append(h_out)
+            else:
+                q_eval = self.agents[a].get_q_value(obs)
+            action = self.choose_action_with_epsilon_greedy(q_eval)
+            action = torch.tensor([action])
+            action = action.unsqueeze(0)
+            actions.append(action)
+
+            q_eval = q_eval.gather(1, action)
+            q_evals.append(q_eval)
+
+        if self.args.play:
+            q_evals = torch.stack(q_evals, dim=1)
+            state = torch.tensor(state, dtype=torch.float)
+            if self.args.algorithm == 'vdn':
+                q_total_eval = self.trainer.get_q_value(q_evals)
+            elif self.args.algorithm == 'qmix':
+                q_total_eval = self.trainer.get_q_value(q_evals, state)
+            else:
+                q_total_eval = None
+            if self.args.base_net == 'rnn':
+                h_outs = torch.stack(h_outs)
+                return actions, h_outs, q_total_eval.item()
+            else:
+                return actions, q_total_eval.item()
+        else:
+            if self.args.base_net == 'rnn':
+                h_outs = torch.stack(h_outs)
+                return actions, h_outs
+            else:
+                return actions
+
+    def choose_action_with_epsilon_greedy(self, q_val):
+        coin = random.random()
+        if coin < self.epsilon:
+            return random.randint(0, self.args.n_actions - 1)
+        else:
+            return q_val.argmax().item()
+
+    def train(self, batch, step):
+        q_evals = []
+        max_q_prime_evals = []
+        for a in range(self.args.n_agents):
+            obs = batch['observation'][:, a]
+            obs_prime = batch['next_observation'][:, a]
+            action = batch['action'].squeeze(1).unsqueeze(2)[:, a]
+
+            if self.args.base_net == 'rnn':
+                _h_in = batch['hidden_in'][:, a]
+                q_eval, _ = self.agents[a].get_q_value(obs, _h_in)
+            else:
+                q_eval = self.agents[a].get_q_value(obs)
+            q_eval = q_eval.gather(1, action)
+            q_evals.append(q_eval)
+
+            if self.args.base_net == 'rnn':
+                _h_out = batch['hidden_out'][:, a]
+                max_q_prime_eval, _ = self.agents[a].get_target_q_value(obs_prime, _h_out)
+                max_q_prime_eval = max_q_prime_eval.max(1)[0].unsqueeze(1)
+            else:
+                max_q_prime_eval = self.agents[a].get_target_q_value(obs_prime).max(1)[0].unsqueeze(1)
+            max_q_prime_evals.append(max_q_prime_eval)
+
+        q_evals = torch.stack(q_evals, dim=1)
+        max_q_prime_evals = torch.stack(max_q_prime_evals, dim=1)
+
+        state = batch['state']
+        next_state = batch['next_state']
+        reward = batch['reward']
+        done_mask = batch['done_mask']
+
+        if self.args.algorithm == 'vdn':
+            loss = self.train_agents(q_evals, max_q_prime_evals, reward, done_mask)
+        elif self.args.algorithm == 'qmix':
+            loss = self.train_agents(q_evals, max_q_prime_evals, state, next_state, reward, done_mask)
+        else:
+            loss = 0.0
+
+        if step > 0 and step % self.args.target_network_update_interval == 0:
+            for a in range(self.args.n_agents):
+                self.agents[a].update_net()
+            self.trainer.update_net()
+
+        return loss
+
+    def save_model(self):
+        model_params = {}
+        for a in range(self.args.n_agents):
+            model_params['agent_{}'.format(str(a))] = self.agents[a].get_net_params()
+        model_params['mixer'] = self.trainer.get_net_params()
+
+        model_save_filename = os.path.join(
+            model_save_path, "{0}_{1}.pth".format(
+                self.args.algorithm, self.args.base_net
+            )
+        )
+        torch.save(model_params, model_save_filename)
+
+    def load_model(self):
+        saved_model = glob.glob(os.path.join(
+            model_save_path, "{0}_{1}.pth".format(
+                self.args.algorithm, self.args.base_net
+            )
+        ))
+        model_params = torch.load(saved_model[0])
+
+        for a in range(self.args.n_agents):
+            self.agents[a].update_net(model_params['agent_{}'.format(str(a))])
+        self.trainer.update_net(model_params['mixer'])
+
+
+    def run(self):
+        step = 0
+        while step < self.training_steps:
+            state, observations = self.env.reset()
+            done = False
+            if self.args.base_net == 'rnn':
+                h_out = self.init_hidden(1)
+            while not done:
+                h_in = h_out
+                actions, h_out = self.agents.choose_action(observations, h_in)
+
+                next_state, next_observations, reward, done = self.env.step(actions)
+                print('step: {0}, state: {1}, actions: {2}, reward: {3}'.format(step, state, actions, reward))
+                done_mask = 0.0 if done else 1.0
+
+
+                self.replay_memory.put(
+                    [state, observations, actions, reward, next_state, next_observations, h_in, h_out, done_mask]
+                )
+
+
+                if self.replay_memory.size() >= self.args.batch_size:
+                    batch = {}
+                    if self.args.base_net == 'rnn':
+                        s, o, a, r, s_prime, o_prime, hidden_in, hidden_out, done_mask = self.replay_memory.sample(
+                            self.args.batch_size
+                        )
+                        batch['hidden_in'] = hidden_in
+                        batch['hidden_out'] = hidden_out
+                    else:
+                        s, o, a, r, s_prime, o_prime, done_mask = self.replay_memory.sample(self.args.batch_size)
+                    batch['state'] = s
+                    batch['observation'] = o
+                    batch['action'] = a
+                    batch['reward'] = r
+                    batch['next_state'] = s_prime
+                    batch['next_observation'] = o_prime
+                    batch['done_mask'] = done_mask
+
+                    loss = self.train(batch, step)
+
+                    if step % self.args.print_interval == 0:
+                        print("step: {0}, loss: {1}".format(step, loss))
+
+                state = next_state
+                observations = next_observations
+                step += 1
+
+                if done:
+                    break
+        self.agents.save_model()
+
+    def play(self):
+        self.agents.load_model()
+
+        q_value_list, iteration, selected_q_value_list, q_value_list_0, q_value_list_1, q_value_list_2, \
+        iteration_0, iteration_1, iteration_2 = None, None, None, None, None, None, None, None, None
+
+        if self.args.env_name == 'one_step_payoff_matrix':
+            q_value_list = [[0. for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
+            iteration = [[0 for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
+        elif self.args.env_name == 'two_step_payoff_matrix':
+            q_value_list_0 = [[0. for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
+            iteration_0 = [[0 for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
+            q_value_list_1 = [[0. for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
+            iteration_1 = [[0 for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
+            q_value_list_2 = [[0. for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
+            iteration_2 = [[0 for _ in range(self.args.n_actions)] for _ in range(self.args.n_actions)]
+        else:
+            raise Exception("Wrong env name.")
+
+        step = 0
+        while step < self.playing_steps:
+            state, observations = self.env.reset()
+            done = False
+
+            if self.args.base_net == 'rnn':
+                h_out = init_hidden(self.args)
+            state_num = 0
+            while not done:
+                if self.args.base_net == 'rnn':
+                    h_in = h_out
+                    actions, h_out, q_total_evals = self.agents.choose_action(observations, h_in=h_in, state=state)
+                else:
+                    actions, q_total_evals = self.agents.choose_action(observations, state=state)
+                next_state, next_observations, reward, done = self.env.step(actions)
+
+                state = next_state
+                observations = next_observations
+
+                if self.args.env_name == 'one_step_payoff_matrix':
+                    q_value_list[actions[0]][actions[1]] += q_total_evals
+                    iteration[actions[0]][actions[1]] += 1
+                elif self.args.env_name == 'two_step_payoff_matrix':
+                    if state_num == 0:
+                        if actions[0] == 0:
+                            state_num = 1
+                        if actions[0] == 1:
+                            state_num = 2
+                        q_value_list_0[actions[0]][actions[1]] += q_total_evals
+                        iteration_0[actions[0]][actions[1]] += 1
+                    else:
+                        if state_num == 1:
+                            q_value_list_1[actions[0]][actions[1]] += q_total_evals
+                            iteration_1[actions[0]][actions[1]] += 1
+                        elif state_num == 2:
+                            q_value_list_2[actions[0]][actions[1]] += q_total_evals
+                            iteration_2[actions[0]][actions[1]] += 1
+
+                step += 1
+
+                if done:
+                    break
+
+        if self.args.env_name == 'one_step_payoff_matrix':
+            for i in range(self.args.n_actions):
+                for j in range(self.args.n_actions):
+                    q_value_list[i][j] /= iteration[i][j]
+            print(q_value_list)
+        elif self.args.env_name == 'two_step_payoff_matrix':
+            for i in range(self.args.n_actions):
+                for j in range(self.args.n_actions):
+                    q_value_list_0[i][j] /= iteration_0[i][j]
+                    q_value_list_1[i][j] /= iteration_1[i][j]
+                    q_value_list_2[i][j] /= iteration_2[i][j]
+            print(q_value_list_0)
+            print(q_value_list_1)
+            print(q_value_list_2)
