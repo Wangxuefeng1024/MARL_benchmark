@@ -152,13 +152,13 @@ class IBFComm(nn.Module):
         self.fc2 = nn.Linear(args.rnn_hidden_dim, args.rnn_hidden_dim)
         self.fc3 = nn.Linear(args.rnn_hidden_dim, args.comm_embed_dim * self.n_agents)
 
-        # self.inference_model = nn.Sequential(
-        #     nn.Linear(input_shape + args.comm_embed_dim * self.n_agents, 4 * args.comm_embed_dim * self.n_agents),
-        #     nn.ReLU(True),
-        #     nn.Linear(4 * args.comm_embed_dim * self.n_agents, 4 * args.comm_embed_dim * self.n_agents),
-        #     nn.ReLU(True),
-        #     nn.Linear(4 * args.comm_embed_dim * self.n_agents, args.n_actions)
-        # )
+        self.inference_model = nn.Sequential(
+            nn.Linear(input_shape + args.comm_embed_dim * self.n_agents, 4 * args.comm_embed_dim * self.n_agents),
+            nn.ReLU(True),
+            nn.Linear(4 * args.comm_embed_dim * self.n_agents, 4 * args.comm_embed_dim * self.n_agents),
+            nn.ReLU(True),
+            nn.Linear(4 * args.comm_embed_dim * self.n_agents, args.n_actions)
+        )
 
     def forward(self, inputs):
         x = F.relu(self.fc1(inputs))

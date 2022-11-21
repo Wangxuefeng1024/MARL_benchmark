@@ -1,5 +1,6 @@
 from policy.qmix import QMIX
 from policy.vdn import VDN
+from policy.pac import PAC
 # from policy.wqmix import WQMIX
 from tensorboardX import SummaryWriter
 from smac.env import StarCraft2Env
@@ -26,14 +27,15 @@ def main(args):
     args.n_agents = env_info["n_agents"]
     args.n_states = env_info["state_shape"]
     args.n_obs = env_info["obs_shape"]
+    args.obs_shape = args.n_obs
     args.episode_limit = env_info["episode_limit"]
 
     if args.algo == "qmix":
         model = QMIX(env, args)
     elif args.algo == "vdn":
         model = VDN(env, args)
-    # elif args.algo == "wqmix":
-    #     model = WQMIX(env, args)
+    elif args.algo == "pac":
+        model = PAC(env, args)
     else:
         model = QMIX(env, args)
     print(model)
@@ -45,14 +47,14 @@ def main(args):
     while time_steps < args.max_steps:
         print('time_steps {}'.format(time_steps))
         # evaluate 20 episodes after training every 100 episodes
-        if time_steps // args.evaluate_cycle > evaluate_steps:
-            win_rate, episode_reward = model.evaluate()
-            model.win_rates.append(win_rate)
-            model.episode_rewards.append(episode_reward)
-            evaluate_steps += 1
-            if args.tensorboard:
-                writer.add_scalar(tag='agent/win rates', global_step=evaluate_steps, scalar_value=win_rate)
-                writer.add_scalar(tag='agent/reward', global_step=evaluate_steps, scalar_value=episode_reward)
+        # if time_steps // args.evaluate_cycle > evaluate_steps:
+        #     win_rate, episode_reward = model.evaluate()
+        #     model.win_rates.append(win_rate)
+        #     model.episode_rewards.append(episode_reward)
+        #     evaluate_steps += 1
+        #     if args.tensorboard:
+        #         writer.add_scalar(tag='agent/win rates', global_step=evaluate_steps, scalar_value=win_rate)
+        #         writer.add_scalar(tag='agent/reward', global_step=evaluate_steps, scalar_value=episode_reward)
 
         episodes = []
         # 收集self.args.n_episodes个episodes
@@ -98,7 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_episodes', type=int, default=20, help='random seed')
     parser.add_argument('--train_steps', type=int, default=1, help='random seed')
 
-    parser.add_argument('--algo', type=str, default='qmix', help='the algorithm to train the agent')
+    parser.add_argument('--algo', type=str, default='pac', help='the algorithm to train the agent')
 
     parser.add_argument('--max_steps', type=int, default=2000000, help='total time steps')
     parser.add_argument('--n_episodes', type=int, default=1, help='the number of episodes before once training')
@@ -110,10 +112,12 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
     parser.add_argument('--lr_critic', type=float, default=1e-4, help='critic learning rate')
     parser.add_argument('--lr_actor', type=float, default=1e-4, help='actor learning rate')
+    parser.add_argument('--comm_embed_dim', type=int, default=64, help='total time steps')
 
     parser.add_argument('--epsilon', type=float, default=1.0, help='discount factor')
     parser.add_argument('--anneal_epsilon', type=float, default=0.000019, help='discount factor')
     parser.add_argument('--min_epsilon', type=float, default=0.05, help='discount factor')
+    parser.add_argument('--alpha', type=float, default=0.1, help='discount factor')
 
     parser.add_argument('--optimizer', type=str, default="RMS", help='optimizer')
     parser.add_argument('--evaluate_cycle', type=int, default=100, help='how often to evaluate the model')

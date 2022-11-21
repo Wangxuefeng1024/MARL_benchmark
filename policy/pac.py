@@ -26,7 +26,7 @@ class PAC:
         self.min_epsilon = args.min_epsilon
         self.episode_limit = args.episode_limit
         input_shape = self.obs_shape
-        self.comm = IBFComm(input_shape, args)
+
         self.win_rates = []
         self.episode_rewards = []
         self.buffer = ReplayBuffer(args)
@@ -39,6 +39,7 @@ class PAC:
         if args.reuse_network:
             input_shape += self.n_agents
         # 神经网络
+        self.comm = IBFComm(input_shape, args)
         self.eval_rnn = Actor(input_shape, args)  # 每个agent选动作的网络
         self.target_rnn = Actor(input_shape, args)
         self.eval_qmix_net = QMixingNetwork(args)  # 把agentsQ值加起来的网络
@@ -50,6 +51,7 @@ class PAC:
             self.eval_qmix_net.cuda()
             self.target_qmix_net.cuda()
             self.eval_pagent.cuda()
+            self.comm.cuda()
             self.log_alpha = self.log_alpha.cuda()
         self.model_dir = args.model_dir + '/' + args.algo + '/' + args.map
         # 如果存在模型则加载模型
@@ -300,6 +302,110 @@ class PAC:
                                  (t_env - self.args.comm_entropy_beta_start_decay)
         return comm_entropy_beta
 
+    def generate_episode(self, episode_num=None, evaluate=False):
+        if self.args.replay_dir != '' and evaluate and episode_num == 0:  # prepare for save replay of evaluation
+            self.env.close()
+        o, u, r, s, avail_u, u_onehot, terminate, padded = [], [], [], [], [], [], [], []
+        self.env.reset()
+        terminated = False
+        win_tag = False
+        step = 0
+        episode_reward = 0  # cumulative rewards
+        last_action = np.zeros((self.args.n_agents, self.args.n_actions))
+        self.init_hidden(1)
+
+        # epsilon
+        epsilon = 0 if evaluate else self.epsilon
+        if self.args.epsilon_anneal_scale == 'episode':
+            epsilon = epsilon - self.anneal_epsilon if epsilon > self.min_epsilon else epsilon
+
+        while not terminated and step < self.args.episode_limit:
+            # time.sleep(0.2)
+            obs = self.env.get_obs()
+            state = self.env.get_state()
+            actions, avail_actions, actions_onehot = [], [], []
+            for agent_id in range(self.n_agents):
+                avail_action = self.env.get_avail_agent_actions(agent_id)
+                action = self.choose_action(obs[agent_id], last_action[agent_id], agent_id,
+                                                   avail_action, epsilon)
+                # generate onehot vector of th action
+                action_onehot = np.zeros(self.args.n_actions)
+                action_onehot[action] = 1
+                actions.append(np.int(action))
+                actions_onehot.append(action_onehot)
+                avail_actions.append(avail_action)
+                last_action[agent_id] = action_onehot
+
+            reward, terminated, info = self.env.step(actions)
+            win_tag = True if terminated and 'battle_won' in info and info['battle_won'] else False
+            o.append(obs)
+            s.append(state)
+            u.append(np.reshape(actions, [self.n_agents, 1]))
+            u_onehot.append(actions_onehot)
+            avail_u.append(avail_actions)
+            r.append([reward])
+            terminate.append([terminated])
+            padded.append([0.])
+            episode_reward += reward
+            step += 1
+            if self.args.epsilon_anneal_scale == 'step':
+                epsilon = epsilon - self.anneal_epsilon if epsilon > self.min_epsilon else epsilon
+        # last obs
+        obs = self.env.get_obs()
+        state = self.env.get_state()
+        o.append(obs)
+        s.append(state)
+        o_next = o[1:]
+        s_next = s[1:]
+        o = o[:-1]
+        s = s[:-1]
+        # get avail_action for last obs，because target_q needs avail_action in training
+        avail_actions = []
+        for agent_id in range(self.n_agents):
+            avail_action = self.env.get_avail_agent_actions(agent_id)
+            avail_actions.append(avail_action)
+        avail_u.append(avail_actions)
+        avail_u_next = avail_u[1:]
+        avail_u = avail_u[:-1]
+
+        # if step < self.episode_limit，padding
+        for i in range(step, self.episode_limit):
+            o.append(np.zeros((self.n_agents, self.obs_shape)))
+            u.append(np.zeros([self.n_agents, 1]))
+            s.append(np.zeros(self.state_shape))
+            r.append([0.])
+            o_next.append(np.zeros((self.n_agents, self.obs_shape)))
+            s_next.append(np.zeros(self.state_shape))
+            u_onehot.append(np.zeros((self.n_agents, self.n_actions)))
+            avail_u.append(np.zeros((self.n_agents, self.n_actions)))
+            avail_u_next.append(np.zeros((self.n_agents, self.n_actions)))
+            padded.append([1.])
+            terminate.append([1.])
+
+        episode = dict(o=o.copy(),
+                       s=s.copy(),
+                       u=u.copy(),
+                       r=r.copy(),
+                       avail_u=avail_u.copy(),
+                       o_next=o_next.copy(),
+                       s_next=s_next.copy(),
+                       avail_u_next=avail_u_next.copy(),
+                       u_onehot=u_onehot.copy(),
+                       padded=padded.copy(),
+                       terminated=terminate.copy()
+                       )
+        # add episode dim
+        for key in episode.keys():
+            episode[key] = np.array([episode[key]])
+        if not evaluate:
+            self.epsilon = epsilon
+
+        if evaluate and episode_num == self.args.evaluate_epoch - 1 and self.args.replay_dir != '':
+            self.env.save_replay()
+            self.env.close()
+        return episode, episode_reward, win_tag, step
+
+
     def _logits(self, bs, inputs):
         # shape = (bs * self.n_agents, -1)
         t_logits = self.comm.inference_model(inputs)
@@ -336,6 +442,32 @@ class PAC:
         inputs_next = torch.cat([x.reshape(episode_num * self.args.n_agents, -1) for x in inputs_next], dim=1)
         return inputs, inputs_next
 
+    def train(self, batch, train_step, epsilon=None):  # coma needs epsilon for training
+
+        # different episode has different length, so we need to get max length of the batch
+        max_episode_len = self._get_max_episode_len(batch)
+        for key in batch.keys():
+            if key != 'z':
+                batch[key] = batch[key][:, :max_episode_len]
+        loss = self.learn(batch, max_episode_len, train_step, epsilon)
+        if train_step > 0 and train_step % self.args.save_cycle == 0:
+            self.save_model(train_step)
+        return loss
+
+    def _get_max_episode_len(self, batch):
+        terminated = batch['terminated']
+        episode_num = terminated.shape[0]
+        max_episode_len = 0
+        for episode_idx in range(episode_num):
+            for transition_idx in range(self.args.episode_limit):
+                if terminated[episode_idx, transition_idx, 0] == 1:
+                    if transition_idx + 1 >= max_episode_len:
+                        max_episode_len = transition_idx + 1
+                    break
+        if max_episode_len == 0:  # 防止所有的episode都没有结束，导致terminated中没有1
+            max_episode_len = self.args.episode_limit
+        return max_episode_len
+
     def get_q_values(self, batch, max_episode_len):
         episode_num = batch['o'].shape[0]
         q_evals, q_targets = [], []
@@ -361,12 +493,46 @@ class PAC:
         q_targets = torch.stack(q_targets, dim=1)
         return q_evals, q_targets
 
+    def choose_action(self, obs, last_action, agent_num, avail_actions, epsilon):
+        inputs = obs.copy()
+        avail_actions_ind = np.nonzero(avail_actions)[0]  # index of actions which can be choose
+
+        # transform agent_num to onehot vector
+        agent_id = np.zeros(self.n_agents)
+        agent_id[agent_num] = 1.
+
+        if self.args.last_action:
+            inputs = np.hstack((inputs, last_action))
+        if self.args.reuse_network:
+            inputs = np.hstack((inputs, agent_id))
+        hidden_state = self.eval_hidden[:, agent_num, :]
+
+        # transform the shape of inputs from (42,) to (1,42)
+        inputs = torch.tensor(inputs, dtype=torch.float32).unsqueeze(0)
+        avail_actions = torch.tensor(avail_actions, dtype=torch.float32).unsqueeze(0)
+        if self.args.cuda:
+            inputs = inputs.cuda()
+            hidden_state = hidden_state.cuda()
+
+        # get q value
+
+        q_value, self.eval_hidden[:, agent_num, :] = self.eval_rnn(inputs, hidden_state)
+
+        # choose action from q value
+
+        q_value[avail_actions == 0.0] = - float("inf")
+        if np.random.uniform() < epsilon:
+            action = np.random.choice(avail_actions_ind)  # action是一个整数
+        else:
+            action = torch.argmax(q_value)
+        return action
+
     def init_hidden(self, episode_num):
         # 为每个episode中的每个agent都初始化一个eval_hidden、target_hidden
         self.eval_hidden = torch.zeros((episode_num, self.n_agents, self.args.rnn_hidden_dim))
         self.target_hidden = torch.zeros((episode_num, self.n_agents, self.args.rnn_hidden_dim))
         self.peval_hidden = torch.zeros((episode_num, self.n_agents, self.args.rnn_hidden_dim))
-        self.eval_pagent.init_hidden()
+        # self.eval_pagent.init_hidden()
         # self.ptarget_hidden = torch.zeros((episode_num, self.n_agents, self.args.rnn_hidden_dim))
 
     def save_model(self, train_step):
