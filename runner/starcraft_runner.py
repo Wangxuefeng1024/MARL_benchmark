@@ -1,4 +1,5 @@
 from policy.qmix import QMIX
+from policy.qatten import Qatten
 from policy.vdn import VDN
 from policy.pac import PAC
 # from policy.wqmix import WQMIX
@@ -36,6 +37,8 @@ def main(args):
         model = VDN(env, args)
     elif args.algo == "pac":
         model = PAC(env, args)
+    elif args.algo == "qatten":
+        model = Qatten(env, args)
     else:
         model = QMIX(env, args)
     print(model)
@@ -100,7 +103,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_episodes', type=int, default=20, help='random seed')
     parser.add_argument('--train_steps', type=int, default=1, help='random seed')
 
-    parser.add_argument('--algo', type=str, default='pac', help='the algorithm to train the agent')
+    parser.add_argument('--algo', type=str, default='qatten', help='the algorithm to train the agent')
 
     parser.add_argument('--max_steps', type=int, default=2000000, help='total time steps')
     parser.add_argument('--n_episodes', type=int, default=1, help='the number of episodes before once training')
