@@ -2,6 +2,36 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 
+
+class Pagent(nn.Module):
+    def __init__(self, input_shape, args):
+        super(Pagent, self).__init__()
+        self.args = args
+
+        self.fc1 = nn.Linear(input_shape, args.rnn_hidden_dim)
+        self.rnn = nn.GRUCell(args.rnn_hidden_dim, args.rnn_hidden_dim)
+        self.fc2 = nn.Linear(args.rnn_hidden_dim, args.n_actions)
+
+    def init_hidden(self):
+        # make hidden states on same device as model
+        a = self.fc1.weight.new(1, self.args.rnn_hidden_dim).zero_()
+        # 为每个episode中的每个agent都初始化一个eval_hidden、target_hidden
+        # self.eval_hidden = torch.zeros((episode_num, self.n_agents, self.args.rnn_hidden_dim))
+        return a
+
+    def forward(self, obs, hidden_state):
+        x = F.relu(self.fc1(obs))
+        h_in = hidden_state.reshape(-1, self.args.rnn_hidden_dim)
+        h = self.rnn(x, h_in)
+        q = self.fc2(h)
+        # q = torch.clamp(q,-20,2)
+        q = torch.clamp(q, -5, 2)
+        # q = torch.sigmoid(q)  # qmix_sac
+
+        # q = 4* f.tanh(q)  # TODO
+        # q = q.clone()
+        return q, h
+
 class Actor(nn.Module):
     # Because all the agents share the same network, input_shape=obs_shape+n_actions+n_agents
     def __init__(self, input_shape, args):
@@ -22,21 +52,19 @@ class Actor(nn.Module):
         return q, h
 
 class Critic(nn.Module):
-    # local critic network
+    # Because all the agents share the same network, input_shape=obs_shape+n_actions+n_agents
     def __init__(self, input_shape, args):
         super(Critic, self).__init__()
         self.args = args
 
         self.fc1 = nn.Linear(input_shape, args.rnn_hidden_dim)
         self.rnn = nn.GRUCell(args.rnn_hidden_dim, args.rnn_hidden_dim)
-        # we still need to output the Q value responded to each action
         self.fc2 = nn.Linear(args.rnn_hidden_dim, args.n_actions)
 
-    def forward(self, obs, assist_info, hidden_state):
-        x = F.relu(self.fc1(torch.cat([obs, assist_info], dim=-1)))
+    def forward(self, obs, hidden_state):
+        x = F.relu(self.fc1(obs))
         h_in = hidden_state.reshape(-1, self.args.rnn_hidden_dim)
         h = self.rnn(x, h_in)
-        # output Q value vector now
         q = self.fc2(h)
         return q, h
 

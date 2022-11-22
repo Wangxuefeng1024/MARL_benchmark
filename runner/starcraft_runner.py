@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append('../')
+
 from policy.qmix import QMIX
 from policy.qatten import Qatten
 from policy.vdn import VDN
@@ -42,22 +46,20 @@ def main(args):
     else:
         model = QMIX(env, args)
     print(model)
-    # episode_id = 0
-    # train_steps = 0
-    # total_step = 0
+
     # we set 2000000 total timesteps now
     time_steps, train_steps, evaluate_steps = 0, 0, -1
     while time_steps < args.max_steps:
         print('time_steps {}'.format(time_steps))
         # evaluate 20 episodes after training every 100 episodes
-        # if time_steps // args.evaluate_cycle > evaluate_steps:
-        #     win_rate, episode_reward = model.evaluate()
-        #     model.win_rates.append(win_rate)
-        #     model.episode_rewards.append(episode_reward)
-        #     evaluate_steps += 1
-        #     if args.tensorboard:
-        #         writer.add_scalar(tag='agent/win rates', global_step=evaluate_steps, scalar_value=win_rate)
-        #         writer.add_scalar(tag='agent/reward', global_step=evaluate_steps, scalar_value=episode_reward)
+        if time_steps // args.evaluate_cycle > evaluate_steps:
+            win_rate, episode_reward = model.evaluate()
+            model.win_rates.append(win_rate)
+            model.episode_rewards.append(episode_reward)
+            evaluate_steps += 1
+            if args.tensorboard:
+                writer.add_scalar(tag='agent/win rates', global_step=evaluate_steps, scalar_value=win_rate)
+                writer.add_scalar(tag='agent/reward', global_step=evaluate_steps, scalar_value=episode_reward)
 
         episodes = []
         # 收集self.args.n_episodes个episodes
@@ -103,7 +105,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_episodes', type=int, default=20, help='random seed')
     parser.add_argument('--train_steps', type=int, default=1, help='random seed')
 
-    parser.add_argument('--algo', type=str, default='qatten', help='the algorithm to train the agent')
+    parser.add_argument('--algo', type=str, default='pac', help='the algorithm to train the agent')
 
     parser.add_argument('--max_steps', type=int, default=2000000, help='total time steps')
     parser.add_argument('--n_episodes', type=int, default=1, help='the number of episodes before once training')
@@ -115,7 +117,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
     parser.add_argument('--lr_critic', type=float, default=1e-4, help='critic learning rate')
     parser.add_argument('--lr_actor', type=float, default=1e-4, help='actor learning rate')
-    parser.add_argument('--comm_embed_dim', type=int, default=64, help='total time steps')
+    parser.add_argument('--comm_embed_dim', type=int, default=3, help='total time steps')
 
     parser.add_argument('--epsilon', type=float, default=1.0, help='discount factor')
     parser.add_argument('--anneal_epsilon', type=float, default=0.000019, help='discount factor')
