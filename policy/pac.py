@@ -606,3 +606,13 @@ class PAC:
                         max_episode_len = transition_idx + 1
                     break
         return max_episode_len
+
+    def evaluate(self):
+        win_number = 0
+        episode_rewards = 0
+        for epoch in range(self.args.evaluate_epoch):
+            _, episode_reward, win_tag, _ = self.generate_episode(epoch, evaluate=True)
+            episode_rewards += episode_reward
+            if win_tag:
+                win_number += 1
+        return win_number / self.args.evaluate_epoch, episode_rewards / self.args.evaluate_epoch
