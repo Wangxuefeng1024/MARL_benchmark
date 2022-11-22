@@ -18,6 +18,8 @@ class PAC:
         self.anneal_epsilon = args.anneal_epsilon
         self.min_epsilon = args.min_epsilon
         self.weight = 0.7
+        self.win_rates = []
+        self.episode_rewards = []
         self.writer = SummaryWriter(
             log_dir='../runs/' +'starcraft/'+ args.algo + "/" + str(
                 args.map))
