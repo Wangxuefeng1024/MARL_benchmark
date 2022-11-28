@@ -16,13 +16,11 @@ os.environ["NUMEXPR_NUM_THREADS"] = str(cpu_num)
 torch.set_num_threads(cpu_num)
 
 from policy.commnet import TJ_CommNet
-# from policy.DICG.dicg_agent import TJ_DICG
-# from policy.DGN.dgn_agent import TJ_DGN
+from policy.tarmac import TJ_TarMAC
+
 from Envs.tj.traffic_junction_env import TrafficJunctionEnv
 
-# from algo.TarMAC_2.tarmac_agent_2 import TJ_TarMAC_2
 from utils.util import _flatten_obs
-
 
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -44,13 +42,8 @@ def main(args):
 
     if args.algo == "commnet":
         model = TJ_CommNet(n_states, n_actions, n_agents, args)
-    # elif args.algo == "tarmac":
-    #     model = TJ_TarMAC_2(n_states, n_actions, n_agents, args)
-    # elif args.algo == "dicg":
-    #     model = TJ_DICG(n_states, n_actions, n_agents, args)
-    # elif args.algo == "dgn":
-    #     model = TJ_DGN(n_states, n_actions, n_agents, args)
-
+    elif args.algo == "tarmac":
+        model = TJ_TarMAC(n_states, n_actions, n_agents, args)
     else:
         model = TJ_CommNet(n_states, n_actions, n_agents, args)
 
@@ -123,8 +116,8 @@ if __name__ == '__main__':
     parser.add_argument('--n_actions', default=2, type=int)
     parser.add_argument('--n_agents', default=20, type=int)
     parser.add_argument('--state_shape', default=29, type=int)
-    parser.add_argument('--algo', default='eva_8', type=str,
-                        help="mhop/eva/commnet/bicnet/maddpg/tarmac/sarnet/i2c/i2cfc")
+    parser.add_argument('--algo', default='tarmac', type=str,
+                        help="commnet/tarmac")
     parser.add_argument('--mode', default="train", type=str, help="train/eval")
     parser.add_argument('--difficulty', default="medium", type=str, help="easy/medium/hard")
     parser.add_argument('--episode_length', default=80, type=int)

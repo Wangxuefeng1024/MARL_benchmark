@@ -12,7 +12,7 @@ class Actor(nn.Module):
         # that's the encoder
         self.args = args
         self.dim_obs = dim_observation
-        self.policy_hidden = torch.zeros(args.n_agents, args.rnn_hidden_size).to(device)
+        self.hidden_state = torch.zeros(args.n_agents, args.rnn_hidden_size).to(device)
         # self.FC1 = nn.Linear(dim_observation + args.rnn_hidden_size, args.rnn_hidden_size)
 
         # GRU policy
@@ -81,7 +81,7 @@ class Actor(nn.Module):
         # result_2 = F.tanh(self.FC3(result_2)).squeeze()
         # remember replace the hidden state
         if batch_size == 1:
-            self.policy_hidden = final_hidden.squeeze()
+            self.hidden_state = final_hidden.squeeze()
             return result_2
         else:
             return result_2
