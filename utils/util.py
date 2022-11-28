@@ -37,23 +37,7 @@ def get_shape_from_obs_space(obs_space):
         raise NotImplementedError
     return obs_shape
 
-def obs_encode(obs, h_in, fe):  # 将obs和h_out 编码成state_dict,state_dict_tensor
-    # h_in = h_out
-    for i in range(len(obs)):
-        if obs[i]['active'] == 0:
-            state_dict1 = fe.encode(obs[i])  # 长度为7的字典
-            state_dict_tensor1 = state_to_tensor(state_dict1, h_in)
-        else:
-            state_dict2 = fe.encode(obs[i])
-            state_dict_tensor2 = state_to_tensor(state_dict2, h_in)
-    state_dict = [state_dict1, state_dict2]
-    state_dict_tensor = {}
 
-    for k, v in state_dict_tensor1.items():
-        state_dict_tensor[k] = torch.cat((state_dict_tensor1[k], state_dict_tensor2[k]), 0)
-    # state_dict_tensor['hidden'] = h_in  # ((1,1,256),(1,1,256))
-
-    return state_dict, state_dict_tensor
 def get_shape_from_act_space(act_space):
     if act_space.__class__.__name__ == 'Discrete':
         act_shape = 1
@@ -87,3 +71,13 @@ def tile_images(img_nhwc):
     img_HhWwc = img_HWhwc.transpose(0, 2, 1, 3, 4)
     img_Hh_Ww_c = img_HhWwc.reshape(H*h, W*w, c)
     return img_Hh_Ww_c
+
+def hard_update(source, target):
+    target.load_state_dict(source.state_dict())
+
+
+def soft_update(source, target, tau):
+    for src_param, tgt_param in zip(source.parameters(), target.parameters()):
+        tgt_param.data.copy_(
+            tgt_param.data * (1.0 - tau) + src_param.data * tau
+        )

@@ -1,17 +1,11 @@
 import sys
 
 sys.path.append('../')
-from env.make_env import make_env
-from env.predator_prey.make_env import pp_make_env
 import argparse, datetime
 from tensorboardX import SummaryWriter
 import torch
 import numpy as np
 
-from algo.bicnet.bicnet_agent import BiCNet
-from algo.evaluator.eva_agent import TJ_EVA, compute_adj, transfer_adj
-from algo.eva_2.eva2_agent import TJ_EVA_2
-from algo.eva_3.eva3_agent import TJ_EVA_3
 import os
 cpu_num = 2
 os.environ["OMP_NUM_THREADS"] = str(cpu_num)
@@ -20,22 +14,11 @@ os.environ["MKL_NUM_THREADS"] = str(cpu_num)
 os.environ["VECLIB_MAXIMUM_THREADS"] = str(cpu_num)
 os.environ["NUMEXPR_NUM_THREADS"] = str(cpu_num)
 torch.set_num_threads(cpu_num)
-from algo.eva_4.eva4_agent import TJ_EVA_4
-from algo.eva_5.eva5_agent import TJ_EVA_5
-from algo.eva_6.eva6_agent import TJ_EVA_6
-from algo.eva_8.eva8_agent import TJ_EVA_8
-from algo.eva_11.eva11_agent import TJ_EVA_11
-from algo.eva_15.eva15_agent import TJ_EVA_15
-from algo.eva_16.eva16_agent import TJ_EVA_16
+
 from algo.commnet.commnet_agent import TJ_CommNet
-from algo.G2A.g2a_agent import TJ_G2A
 from algo.DICG.dicg_agent import TJ_DICG
 from algo.DGN.dgn_agent import TJ_DGN
-from algo.i2c.i2c import I2C, get_comm_pairs
-from algo.i2c_fc.i2c_fc_agent import TJ_I2C_FC
-from algo.SARNet_2.sarnet_agent_2 import TJ_SARNet_2
 from env.tj.traffic_junction_env import TrafficJunctionEnv
-from algo.Multi_Hop.mhop_agent import MHOP
 
 from algo.TarMAC_2.tarmac_agent_2 import TJ_TarMAC_2
 from algo.utils import _flatten_obs
@@ -43,85 +26,29 @@ from algo.utils import _flatten_obs
 
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if args.scenario == "predator_prey":
-        env = pp_make_env(args)
-        n_agents = args.n_agents
-        n_actions = 5
-
-        n_states = env.observation_space[0].shape[0]
-    elif args.scenario == "traffic_junction":
-        env = TrafficJunctionEnv()
-        env.multi_agent_init(args)
-        n_agents = args.n_agents
-        n_actions = 2
-        if args.difficulty == 'hard':
-            n_states = 77
-        else:
-            n_states = 29
+    env = TrafficJunctionEnv()
+    env.multi_agent_init(args)
+    n_agents = args.n_agents
+    n_actions = 2
+    if args.difficulty == 'hard':
+        n_states = 77
     else:
-        env = make_env(args)
-        n_agents = args.n_agents
-        n_actions = env.world.dim_p
-
-        n_states = env.observation_space[0].shape[0]
+        n_states = 29
 
     torch.manual_seed(args.seed)
-
     if args.tensorboard and args.mode == "train":
         writer = SummaryWriter(
             log_dir='runs/' + args.algo + "/" + args.log_dir + str(args.episode_length) + args.scenario + str(
                 args.n_agents) + '_' + str(args.attention_layer) + args.reminder)
 
-    if args.algo == "bicnet":
-        model = BiCNet(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "mhop":
-        model = MHOP(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "eva":
-        model = TJ_EVA(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "eva_2":
-        model = TJ_EVA_2(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "eva_3":
-        model = TJ_EVA_3(n_states, n_actions, n_agents, args)
-    elif args.algo == "eva_4":
-        model = TJ_EVA_4(n_states, n_actions, n_agents, args)
-    elif args.algo == "eva_5":
-        model = TJ_EVA_5(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "eva_6":
-        model = TJ_EVA_6(n_states, n_actions, n_agents, args)
-    elif args.algo == "eva_8":
-        model = TJ_EVA_8(n_states, n_actions, n_agents, args)
-    elif args.algo == "eva_11":
-        model = TJ_EVA_11(n_states, n_actions, n_agents, args)
-    elif args.algo == "eva_15":
-        model = TJ_EVA_15(n_states, n_actions, n_agents, args)
-    elif args.algo == "eva_16":
-        model = TJ_EVA_16(n_states, n_actions, n_agents, args)
-    elif args.algo == "commnet":
+    if args.algo == "commnet":
         model = TJ_CommNet(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "gnn":
-        model = GNN(n_states, n_actions, n_agents, args)
-
     elif args.algo == "tarmac":
         model = TJ_TarMAC_2(n_states, n_actions, n_agents, args)
-    elif args.algo == "g2a":
-        model = TJ_G2A(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "sarnet":
-        model = TJ_SARNet_2(n_states, n_actions, n_agents, args)
     elif args.algo == "dicg":
         model = TJ_DICG(n_states, n_actions, n_agents, args)
     elif args.algo == "dgn":
         model = TJ_DGN(n_states, n_actions, n_agents, args)
-    elif args.algo == "i2c":
-        model = I2C(n_states, n_actions, n_agents, args)
-    elif args.algo == "i2cfc":
-        model = TJ_I2C_FC(n_states, n_actions, n_agents, args)
 
     else:
         model = TJ_CommNet(n_states, n_actions, n_agents, args)
@@ -226,129 +153,6 @@ def main(args):
 
     if args.tensorboard:
         writer.close()
-
-
-def tj_test(args):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if args.scenario == "predator_prey":
-        env = pp_make_env(args)
-        n_agents = args.n_agents
-        n_actions = 5
-
-        n_states = env.observation_space[0].shape[0]
-    elif args.scenario == "traffic_junction":
-        env = TrafficJunctionEnv()
-        env.multi_agent_init(args)
-        n_agents = args.n_agents
-        n_actions = 2
-        n_states = 29
-    else:
-        env = make_env(args)
-        n_agents = args.n_agents
-        n_actions = env.world.dim_p
-
-        n_states = env.observation_space[0].shape[0]
-
-    torch.manual_seed(args.seed)
-
-    if args.tensorboard:
-        writer = SummaryWriter(log_dir='runs/' + args.algo + "/" + 'tj_test_seed_' + str(args.seed) + '_' + str(
-            args.n_agents) + args.reminder)
-
-    if args.algo == "bicnet":
-        model = BiCNet(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "mhop":
-        model = MHOP(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "eva":
-        model = TJ_EVA(n_states, n_actions, n_agents, args)
-    elif args.algo == "eva_2":
-        model = TJ_EVA_2(n_states, n_actions, n_agents, args)
-    elif args.algo == "eva_3":
-        model = TJ_EVA_3(n_states, n_actions, n_agents, args)
-    elif args.algo == "eva_8":
-        model = TJ_EVA_8(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "commnet":
-        model = TJ_CommNet(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "gnn":
-        model = GNN(n_states, n_actions, n_agents, args)
-    elif args.algo == "dgn":
-        model = TJ_DGN(n_states, n_actions, n_agents, args)
-    elif args.algo == "maddpg":
-        model = MADDPG(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "tarmac":
-        model = TJ_TarMAC(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "sarnet":
-        model = TJ_SARNet(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "i2c":
-        model = I2C(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "i2cfc":
-        model = TJ_I2C_FC(n_states, n_actions, n_agents, args)
-
-    elif args.algo == "full_com":
-        model = FULL_COMM(n_states, n_actions, n_agents, args)
-
-    else:
-        model = MADDPG(n_states, n_actions, n_agents, args)
-
-    print(model)
-
-    episode = 0
-    model.load_model()
-    success = 0
-    with torch.no_grad():
-        for i in range(args.max_episodes):
-            state = env.reset()
-            collision = 0
-            step = 0
-
-            while step <= args.episode_length:
-
-                if args.algo == "eva_2" or args.algo == "eva_8":
-                    adj_matrix = transfer_adj(env, args.n_agents)
-                    state = _flatten_obs(state)
-                    action, log_prob, entropy, adj, hidden_data, pre_feature, first_feature = model.choose_action(state,
-                                                                                                                  adj_matrix,
-                                                                                                                  episode)
-                elif args.algo == "mhop":
-                    adj_matrix = transfer_adj(env, args.n_agents)
-                    state = _flatten_obs(state)
-                    action, log_prob, entropy = model.choose_action(state, adj_matrix, episode)
-                elif args.algo == "eva" or args.algo == "eva_3":
-                    adj_matrix = transfer_adj(env, args.n_agents)
-                    state = _flatten_obs(state)
-                    action, log_prob, entropy = model.choose_action(state, adj_matrix)
-                elif args.algo == "tarmac" or args.algo == "sarnet":
-                    adj_matrix = transfer_adj(env, args.n_agents)
-                    state = _flatten_obs(state)
-                    action, log_prob, entropy = model.choose_action(state, adj_matrix)
-                elif args.algo == "i2cfc":
-                    state = _flatten_obs(state)
-                    action, log_prob, entropy = model.choose_action(state)
-                else:
-                    state = _flatten_obs(state)
-                    action, log_prob, entropy = model.choose_action(state)
-
-                next_state, reward, done, info = env.step(action.cpu().detach().numpy())
-                env.render()
-                step += 1
-
-                state = next_state
-                if env.has_failed == 1:
-                    collision += 1
-
-            if collision == 0:
-                success += 1
-            if i % 100 == 0:
-                print('success time is ', success)
-            writer.add_scalar(tag='agent/win_rate', global_step=i, scalar_value=success)
 
 
 if __name__ == '__main__':
