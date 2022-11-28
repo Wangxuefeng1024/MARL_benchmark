@@ -81,3 +81,17 @@ def soft_update(source, target, tau):
         tgt_param.data.copy_(
             tgt_param.data * (1.0 - tau) + src_param.data * tau
         )
+
+def _flatten_obs(obs):
+    n_agents = len(obs)
+    if isinstance(obs, tuple):
+        _obs = []
+        for agent in obs:  # list/tuple of observations.
+            ag_obs = []
+            for obs_kind in agent:
+                ag_obs.append(np.array(obs_kind).flatten())
+            _obs.append(np.concatenate(ag_obs))
+        obs = np.stack(_obs)
+    obs = obs.reshape(n_agents, -1)
+
+    return obs

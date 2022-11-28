@@ -15,13 +15,13 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = str(cpu_num)
 os.environ["NUMEXPR_NUM_THREADS"] = str(cpu_num)
 torch.set_num_threads(cpu_num)
 
-from algo.commnet.commnet_agent import TJ_CommNet
-from algo.DICG.dicg_agent import TJ_DICG
-from algo.DGN.dgn_agent import TJ_DGN
-from env.tj.traffic_junction_env import TrafficJunctionEnv
+from policy.commnet import TJ_CommNet
+# from policy.DICG.dicg_agent import TJ_DICG
+# from policy.DGN.dgn_agent import TJ_DGN
+from Envs.tj.traffic_junction_env import TrafficJunctionEnv
 
-from algo.TarMAC_2.tarmac_agent_2 import TJ_TarMAC_2
-from algo.utils import _flatten_obs
+# from algo.TarMAC_2.tarmac_agent_2 import TJ_TarMAC_2
+from utils.util import _flatten_obs
 
 
 def main(args):
@@ -32,23 +32,24 @@ def main(args):
     n_actions = 2
     if args.difficulty == 'hard':
         n_states = 77
+        args.episode_length = 80
     else:
         n_states = 29
+        args.episode_length = 60
 
     torch.manual_seed(args.seed)
-    if args.tensorboard and args.mode == "train":
+    if args.tensorboard:
         writer = SummaryWriter(
-            log_dir='runs/' + args.algo + "/" + args.log_dir + str(args.episode_length) + args.scenario + str(
-                args.n_agents) + '_' + str(args.attention_layer) + args.reminder)
+            log_dir='../runs/' + "/traffic_junction/" + args.difficulty + "/" + args.algo + "/" )
 
     if args.algo == "commnet":
         model = TJ_CommNet(n_states, n_actions, n_agents, args)
-    elif args.algo == "tarmac":
-        model = TJ_TarMAC_2(n_states, n_actions, n_agents, args)
-    elif args.algo == "dicg":
-        model = TJ_DICG(n_states, n_actions, n_agents, args)
-    elif args.algo == "dgn":
-        model = TJ_DGN(n_states, n_actions, n_agents, args)
+    # elif args.algo == "tarmac":
+    #     model = TJ_TarMAC_2(n_states, n_actions, n_agents, args)
+    # elif args.algo == "dicg":
+    #     model = TJ_DICG(n_states, n_actions, n_agents, args)
+    # elif args.algo == "dgn":
+    #     model = TJ_DGN(n_states, n_actions, n_agents, args)
 
     else:
         model = TJ_CommNet(n_states, n_actions, n_agents, args)
@@ -60,13 +61,8 @@ def main(args):
     win_times = 0
     while episode < args.max_episodes:
         state = env.reset()
-        adjs = []
-        hidden_datas = []
-        first_features = []
-        pre_features = []
         actions, log_probs, entropys, rewards, adjs, hidden_datas, pre_features, first_features, second_features = [], [], [], [], [], [], [], [], []
-        if args.scenario == "traffic_junction":
-            state = _flatten_obs(state)
+        state = _flatten_obs(state)
         episode += 1
         step = 0
         accum_reward = 0
@@ -74,30 +70,9 @@ def main(args):
 
         while True:
             if args.mode == "train":
-                if args.algo == "eva_2" or args.algo == 'eva_8' :
-                    adj_matrix = transfer_adj(env, args.n_agents)
-                    action, log_prob, entropy, adj, hidden_data, pre_feature, first_feature = model.choose_action(state, adj_matrix, episode)
-                elif args.algo == "eva_15" or args.algo == "eva_16":
-                    adj_matrix = transfer_adj(env, args.n_agents)
-                    action, log_prob, entropy, adj, hidden_data, pre_feature, first_feature, second_feature = model.choose_action(state, adj_matrix, episode)
-                elif args.algo == "mhop":
-                    adj_matrix = transfer_adj(env, args.n_agents)
-                    action, log_prob, entropy = model.choose_action(state, adj_matrix, episode)
-                elif args.algo == "eva" or args.algo == "eva_3" or args.algo == "eva_4" or args.algo == "eva_5" or args.algo == "eva_6" or args.algo == "eva_11":
-                    adj_matrix = transfer_adj(env, args.n_agents)
-                    action, log_prob, entropy = model.choose_action(state, adj_matrix)
-                elif args.algo =="dicg" or args.algo == "tarmac" or args.algo == "sarnet" or args.algo =="dgn":
-                    adj_matrix = transfer_adj(env, args.n_agents)
-                    action, log_prob, entropy = model.choose_action(state, adj_matrix)
-                elif args.algo == "g2a":
-                    action, log_prob, entropy = model.choose_action(state)
-                elif args.algo == "i2cfc":
-                    action, log_prob, entropy = model.choose_action(state)
-                else:
-                    action, log_prob, entropy = model.choose_action(state)
 
-                # if args.scenario == 'traffic_junction':
-                #     action, pi = select_action(action)
+                action, log_prob, entropy = model.choose_action(state)
+
                 actions.append(action)
                 entropys.append(entropy)
                 log_probs.append(log_prob)
@@ -111,25 +86,11 @@ def main(args):
                 accum_reward += sum(reward)
                 rewardA += reward[0]
                 state = next_state
-                if args.algo == 'eva_2' or args.algo == 'eva_8':
-                    adjs.append(adj)
-                    hidden_datas.append(hidden_data)
-                    pre_features.append(pre_feature)
-                    first_features.append(first_feature)
-                elif args.algo == 'eva_15' or args.algo == 'eva_16':
-                    adjs.append(adj)
-                    hidden_datas.append(hidden_data)
-                    pre_features.append(pre_feature)
-                    first_features.append(first_feature)
-                    second_features.append(second_feature)
+
                 # if args.batch_size < step or (True in done):
                 if episode_length < step:
-                    if args.algo == 'eva_2' or args.algo =='eva_8':
-                        loss = model.update(episode, rewards, log_probs, entropys, torch.stack(adjs),torch.stack(hidden_datas), torch.stack(pre_features), torch.stack(first_features))
-                    elif args.algo == 'eva_15' or args.algo =='eva_16':
-                        loss = model.update(episode, rewards, log_probs, entropys, torch.stack(adjs),torch.stack(hidden_datas), torch.stack(pre_features), torch.stack(first_features), torch.stack(second_features))
-                    else:
-                        loss = model.update(episode, rewards, log_probs, entropys)
+
+                    loss = model.update(episode, rewards, log_probs, entropys)
                     print("[Episode %05d] reward %6.4f" % (episode, accum_reward))
                     if not (False in done):
                         win_times += 1
@@ -137,7 +98,7 @@ def main(args):
                         writer.add_scalar(tag='agent/reward', global_step=episode, scalar_value=accum_reward.item())
                         writer.add_scalar(tag='agent/reward_0', global_step=episode, scalar_value=rewardA.item())
 
-                        if args.scenario == "traffic_junction" and episode % 100 == 0:
+                        if episode % 100 == 0:
                             writer.add_scalar('agent/win_rates', global_step=episode, scalar_value=win_times / 100)
 
                         if loss:
@@ -165,7 +126,7 @@ if __name__ == '__main__':
     parser.add_argument('--algo', default='eva_8', type=str,
                         help="mhop/eva/commnet/bicnet/maddpg/tarmac/sarnet/i2c/i2cfc")
     parser.add_argument('--mode', default="train", type=str, help="train/eval")
-    parser.add_argument('--difficulty', default="hard", type=str, help="easy/medium/hard")
+    parser.add_argument('--difficulty', default="medium", type=str, help="easy/medium/hard")
     parser.add_argument('--episode_length', default=80, type=int)
     parser.add_argument('--episode_start_to_train', default=1, type=int)
     parser.add_argument('--memory_length', default=int(1e5), type=int)
