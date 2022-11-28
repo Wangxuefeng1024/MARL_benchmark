@@ -14,17 +14,16 @@ class Critic(nn.Module):
 		obs_dim = self.dim_observation * n_agent
 		act_dim = self.dim_action * n_agent
 		
-		self.FC1 = nn.Linear(obs_dim,1024)
-		self.FC2 = nn.Linear(1024+act_dim,512)
-		self.FC3 = nn.Linear(512,300)
-		self.FC4 = nn.Linear(300,1)
+		self.FC1 = nn.Linear(obs_dim,256)
+		self.FC2 = nn.Linear(256+act_dim,64)
+		self.FC3 = nn.Linear(64,1)
 		
 	# obs:batch_size * obs_dim
 	def forward(self, obs, acts):
 		result = F.relu(self.FC1(obs))
 		combined = torch.cat([result, acts], dim=1)
 		result = F.relu(self.FC2(combined))
-		return self.FC4(F.relu(self.FC3(result)))
+		return self.FC3(result)
 
 
 		
@@ -48,9 +47,9 @@ class Actor(nn.Module):
 		# print('model.dim_action',dim_action)
 		super(Actor, self).__init__()
 		self.args = args
-		self.FC1 = nn.Linear(dim_observation, 500)
-		self.FC2 = nn.Linear(500, 128)
-		self.FC3 = nn.Linear(128, dim_action)
+		self.FC1 = nn.Linear(dim_observation, 64)
+		self.FC2 = nn.Linear(64, 64)
+		self.FC3 = nn.Linear(64, dim_action)
 
 	def forward(self, obs):
 		result = F.relu(self.FC1(obs))

@@ -1,7 +1,7 @@
 # from algo.maddpg.network import Critic, Actor
 from copy import deepcopy
 from torch.optim import Adam
-from agent import base_agent
+# from agent import base_agent
 from utils.namedtuple_memory import ReplayMemory, Experience
 from utils.utils import soft_update, hard_update
 import os, torch
@@ -15,7 +15,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class MADDPG:
     def __init__(self, dim_obs, dim_act, n_agents, args):
         self.args = args
-        self.mode = args.mode
+        # self.mode = args.mode
         self.actors = []
         self.critics = []
         from network.maddpg import Actor, Critic

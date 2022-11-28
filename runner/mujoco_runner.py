@@ -4,6 +4,7 @@ import torch
 import datetime
 import argparse
 import numpy as np
+
 from torch.utils.tensorboard import SummaryWriter
 from policy.ddpg import MADDPG, Cen_DDPG
 
@@ -14,12 +15,17 @@ def main(args):
     args.n_actions = env.action_space.shape or env.action_space.n
     args.max_action = env.action_space.high[0]
     args.exploration_noise = args.exploration_noise * args.max_action
-
+    print("Observations shape:", args.n_states)
+    print("Actions shape:", args.n_actions)
+    print("Action range:", np.min(env.action_space.low),
+          np.max(env.action_space.high))
     n_agents = args.n_agents
-    n_actions = args.n_actions
-    n_states = args.n_states
+    n_actions = args.n_actions[0]
+    n_states = args.n_states[0]
+    args.n_actions = args.n_actions[0]
+    args.n_states = args.n_states[0]
 
-    writer = SummaryWriter(log_dir='runs/'+ "mujoco/" + args.task + "/" + args.algo)
+    writer = SummaryWriter(log_dir='../runs/'+ "mujoco/" + args.task + "/" + args.algo)
 
     # set algorithm
     if args.algo == "maddpg":
@@ -117,13 +123,13 @@ if __name__ == '__main__':
     parser.add_argument('--task', type=str, default='Swimmer-v2')
     parser.add_argument('--algo', type=str, default='maddpg')
     parser.add_argument('--save_dir', type=str, default='mlp')
-    parser.add_argument('--num_agents', type=int, default=2)
+    # parser.add_argument('--num_agents', type=int, default=2)
     parser.add_argument('--num_agents_list', type=list, default=[9, 8])
-    parser.add_argument('--seed', type=int, default=0)
-    parser.add_argument('--buffer-size', type=int, default=1000000)
+    parser.add_argument('--seed', type=int, default=123)
+    parser.add_argument('--memory_length', type=int, default=1000000)
     parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[64, 64])
-    parser.add_argument('--actor-lr', type=float, default=3e-4)
-    parser.add_argument('--critic-lr', type=float, default=1e-3)
+    parser.add_argument('--a_lr', type=float, default=3e-4)
+    parser.add_argument('--c_lr', type=float, default=1e-3)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--tau', type=float, default=0.1)
     parser.add_argument('--exploration-noise', type=float, default=0.1)
@@ -134,8 +140,9 @@ if __name__ == '__main__':
     parser.add_argument('--update-per-step', type=int, default=0.025)
     parser.add_argument('--n-step', type=int, default=5)
     parser.add_argument('--batch-size', type=int, default=1000)
-    parser.add_argument('--training-num', type=int, default=20)
-    parser.add_argument('--test-num', type=int, default=10)
+    parser.add_argument('--episode_before_train', type=int, default=0)
+    # parser.add_argument('--test-num', type=int, default=10)
+    parser.add_argument('--n_agents', type=int, default=2)
     parser.add_argument('--logdir', type=str, default='log')
     parser.add_argument('--render', type=float, default=0.)
     parser.add_argument(
