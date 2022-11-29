@@ -149,7 +149,7 @@ if __name__ == '__main__':
     parser.add_argument('--n-step', type=int, default=100)
     parser.add_argument('--batch-size', type=int, default=600)
     # parser.add_argument('--episode_before_train', type=int, default=1000)
-
+    parser.add_argument('--model_dir', type=str, default='./trained_model/mujoco/')
     parser.add_argument('--episode_before_train', type=int, default=2)
     # parser.add_argument('--test-num', type=int, default=10)
     parser.add_argument('--n_agents', type=int, default=2)

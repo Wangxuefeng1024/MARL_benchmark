@@ -80,13 +80,13 @@ class MADDPG:
         self.critics_target = deepcopy(self.critics)
 
     def save_model(self, episode):
-        if not os.path.exists("./trained_model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(self.args.n_agents)):
-            os.mkdir("./trained_model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(self.args.n_agents))
+        if not os.path.exists(self.args.model_dir + self.args.task + "/" + str(self.args.algo)):
+            os.mkdir(self.args.model_dir + self.args.task + "/" + str(self.args.algo))
         for i in range(self.n_agents):
             torch.save(self.actors[i],
-                       'trained_model/maddpg/' + self.args.scenario + "/" + str(self.args.n_agents) +'/'+ 'actor[' + str(i) + ']' + '_' + str(episode) + '.pth')
+                       self.args.model_dir + self.args.task + "/" + str(self.args.algo) +'/'+ 'actor[' + str(i) + ']' + '_' + str(episode) + '.pth')
             torch.save(self.critics[i],
-                       'trained_model/maddpg/' + self.args.scenario + "/" + str(self.args.n_agents) +'/'+ 'critic[' + str(i) + ']' + '_' + str(episode) + '.pth')
+                       self.args.model_dir + self.args.task + "/" + str(self.args.algo) +'/'+ 'critic[' + str(i) + ']' + '_' + str(episode) + '.pth')
 
     def update(self, i_episode):
 
@@ -119,7 +119,6 @@ class MADDPG:
             self.critic_optimizer[agent].zero_grad()
             self.actors[agent].zero_grad()
             self.critics[agent].zero_grad()
-            # if self.args.scenario == "traffic_junction":
 
             current_Q = self.critics[agent](whole_state, whole_action)
             non_final_next_actions = [self.actors_target[i](non_final_next_states[:, i,:]) for i in range(self.n_agents)]
