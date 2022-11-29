@@ -52,8 +52,8 @@ class CommNet():
         self.episode = 0
 
     def load_model(self):
-        model_actor_path = "./trained_model/" + str(self.config.algo) + "/actor_" + str(200000) + ".pth"
-        model_critic_path = "./trained_model/" + str(self.config.algo) + "/critic_" + str(200000) + ".pth"
+        model_actor_path = "../model/" + str(self.config.algo) + "/actor_" + str(200000) + ".pth"
+        model_critic_path = "../model/" + str(self.config.algo) + "/critic_" + str(200000) + ".pth"
         if os.path.exists(model_critic_path) and os.path.exists(model_actor_path):
             print("load model!")
             actor = torch.load(model_actor_path)
@@ -62,12 +62,12 @@ class CommNet():
             self.critic.load_state_dict(critic)
 
     def save_model(self, episode):
-        if not os.path.exists("./trained_model/" + str(self.config.algo)+ "/" + self.config.scenario + "/" + str(self.config.n_agents)+"/"):
-            os.mkdir("./trained_model/" + str(self.config.algo)+ "/" + self.config.scenario + "/" + str(self.config.n_agents)+"/")
+        if not os.path.exists("../model/" + str(self.config.algo)+ "/" + self.config.scenario + "/" + str(self.config.n_agents)+"/"):
+            os.mkdir("../model/" + str(self.config.algo)+ "/" + self.config.scenario + "/" + str(self.config.n_agents)+"/")
         torch.save(self.actor.state_dict(),
-                   "./trained_model/" + str(self.config.algo)+ "/"  + self.config.scenario + "/" + str(self.config.n_agents) + "/actor_" + str(episode) + ".pth")
+                   "../model/" + str(self.config.algo)+ "/"  + self.config.scenario + "/" + str(self.config.n_agents) + "/actor_" + str(episode) + ".pth")
         torch.save(self.critic.state_dict(),
-                   "./trained_model/" + str(self.config.algo)+ "/"  + self.config.scenario + "/" + str(self.config.n_agents) + "/critic_" + str(episode) + ".pth")
+                   "../model/" + str(self.config.algo)+ "/"  + self.config.scenario + "/" + str(self.config.n_agents) + "/critic_" + str(episode) + ".pth")
 
 
     def choose_action(self, obs, noisy=True):
@@ -189,17 +189,17 @@ class TJ_CommNet():
         self.episode = 0
 
     def load_model(self):
-        model_actor_path = "./trained_model/" + str(self.config.algo)+"/" + self.config.scenario + "/" + str(self.config.n_agents) + "/actor_" + str(200000) + ".pth"
+        model_actor_path = "../model/" + str(self.config.algo)+"/" + self.config.scenario + "/" + str(self.config.n_agents) + "/actor_" + str(200000) + ".pth"
         if os.path.exists(model_actor_path):
             print("load model!")
             actor = torch.load(model_actor_path)
             self.actor.load_state_dict(actor)
 
     def save_model(self, episode):
-        if not os.path.exists("./trained_model/" + str(self.config.algo)+ "/" + self.config.scenario + "/" + str(self.config.n_agents)+"/"):
-            os.mkdir("./trained_model/" + str(self.config.algo)+ "/" + self.config.scenario + "/" + str(self.config.n_agents)+"/")
+        if not os.path.exists("../model/" + str(self.config.algo)+ "/" + self.config.scenario + "/" + str(self.config.n_agents)+"/"):
+            os.mkdir("../model/" + str(self.config.algo)+ "/" + self.config.scenario + "/" + str(self.config.n_agents)+"/")
         torch.save(self.actor.state_dict(),
-                   "./trained_model/" + str(self.config.algo)+ "/"  + self.config.scenario + "/" + str(self.config.n_agents) + "/actor_" + str(episode) + ".pth")
+                   "../model/" + str(self.config.algo)+ "/"  + self.config.scenario + "/" + str(self.config.n_agents) + "/actor_" + str(episode) + ".pth")
 
     def choose_action(self, obs):
         obs = torch.Tensor(np.array(obs)).to(self.device)

@@ -62,15 +62,15 @@ class TarMAC():
             # self.critic.load_state_dict(critic)
 
     def save_model(self, episode):
-        if not os.path.exists("./trained_model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
+        if not os.path.exists("../model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
                 self.args.n_agents) + "/"):
-            os.mkdir("./trained_model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
+            os.mkdir("../model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
                 self.args.n_agents) + "/")
         torch.save(self.actor.state_dict(),
-                   "./trained_model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
+                   "../model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
                        self.args.n_agents) + "/actor_" + str(episode) + ".pth")
         torch.save(self.critic.state_dict(),
-                   "./trained_model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
+                   "../model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
                        self.args.n_agents) + "/critic_" + str(episode) + ".pth")
 
     def init_hidden(self):
@@ -200,12 +200,12 @@ class TJ_TarMAC():
             self.actor.load_state_dict(actor)
 
     def save_model(self, episode):
-        if not os.path.exists("./trained_model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
+        if not os.path.exists("../model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
                 self.args.n_agents) + "/"):
-            os.mkdir("./trained_model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
+            os.mkdir("../model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
                 self.args.n_agents) + "/")
         torch.save(self.actor.state_dict(),
-                   "./trained_model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
+                   "../model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
                        self.args.n_agents) + "/actor_" + str(episode) + ".pth")
 
     def init_hidden(self):

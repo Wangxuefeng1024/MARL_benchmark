@@ -1,5 +1,4 @@
 import sys
-
 sys.path.append('../')
 import argparse, datetime
 from tensorboardX import SummaryWriter

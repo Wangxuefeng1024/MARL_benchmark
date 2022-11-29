@@ -79,13 +79,13 @@ class MADDPG:
         self.critics_target = deepcopy(self.critics)
 
     def save_model(self, episode):
-        if not os.path.exists(self.args.model_dir + self.args.task + "/" + str(self.args.algo)):
-            os.mkdir(self.args.model_dir + self.args.task + "/" + str(self.args.algo))
+        if not os.path.exists('../model/' + self.args.algo + "/" + str(self.args.scenario)):
+            os.mkdir('../model/' + self.args.algo + "/" + str(self.args.scenario))
         for i in range(self.n_agents):
             torch.save(self.actors[i],
-                       self.args.model_dir + self.args.task + "/" + str(self.args.algo) +'/'+ 'actor[' + str(i) + ']' + '_' + str(episode) + '.pth')
+                       '../model/' + str(self.args.algo) + '/' + self.args.scenario + "/" + 'actor[' + str(i) + ']' + '_' + str(episode) + '.pth')
             torch.save(self.critics[i],
-                       self.args.model_dir + self.args.task + "/" + str(self.args.algo) +'/'+ 'critic[' + str(i) + ']' + '_' + str(episode) + '.pth')
+                       '../model/' + self.args.algo + "/" + str(self.args.scenario) +'/'+ 'critic[' + str(i) + ']' + '_' + str(episode) + '.pth')
 
     def update(self, i_episode):
 
@@ -248,15 +248,15 @@ class Cen_DDPG:
             # self.critic.load_state_dict(critic)
 
     def save_model(self, episode):
-        if not os.path.exists("./trained_model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
+        if not os.path.exists("../model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
                 self.args.n_agents) + "/"):
-            os.mkdir("./trained_model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
+            os.mkdir("../model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
                 self.args.n_agents) + "/")
         torch.save(self.actor.state_dict(),
-                   "./trained_model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
+                   "../model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
                        self.args.n_agents) + "/actor_" + str(episode) + ".pth")
         torch.save(self.critic.state_dict(),
-                   "./trained_model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
+                   "../model/" + str(self.args.algo) + "/" + self.args.scenario + "/" + str(
                        self.args.n_agents) + "/critic_" + str(episode) + ".pth")
 
     def init_hidden(self):
