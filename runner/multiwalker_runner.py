@@ -25,7 +25,7 @@ def main(args):
     # set seed
     torch.manual_seed(args.seed)
 
-    writer = SummaryWriter(log_dir='runs/'+ "multiwalker/" + args.algo + "/" + args.log_dir  + str(args.n_agents))
+    writer = SummaryWriter(log_dir='runs/'+ "multiwalker/" + args.algo + "/" + str(args.n_agents))
 
     # set algorithm
     if args.algo == "maddpg":

@@ -1,8 +1,8 @@
 # https://github.com/PKU-AI-Edge/I2C
 
 import numpy as np
-from env.predator_prey.core import World, Agent, Landmark
-from env.predator_prey.scenario import BaseScenario
+from Envs.predator_prey.core import World, Agent, Landmark
+from Envs.predator_prey.scenario import BaseScenario
 
 
 class Scenario(BaseScenario):
@@ -14,7 +14,7 @@ class Scenario(BaseScenario):
         world.dim_c = 2
         world.collaborative = False
         world.discrete_action = True
-        world.num_agents_obs = 3
+        world.num_agents_obs = 2
         world.num_preys_obs = args.n_agents
         # add agents
         world.agents = [Agent() for i in range(args.n_agents)]

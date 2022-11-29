@@ -11,7 +11,6 @@ import numpy as np
 scale_reward = 0.01
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
 class MADDPG:
     def __init__(self, dim_obs, dim_act, n_agents, args):
         self.args = args
@@ -186,9 +185,11 @@ class MADDPG:
                 if action_mask is not None:
                     action = torch.zeros_like(act)
                     action = action + act[action_mask[i]]
-                actions[i, :] = action
+                    actions[i, :] = action
+                actions[i, :] = act
             self.steps_done += 1
             return actions.data.cpu().numpy()
+
 class Cen_DDPG:
 
     def __init__(self, s_dim, a_dim, n_agents, args):

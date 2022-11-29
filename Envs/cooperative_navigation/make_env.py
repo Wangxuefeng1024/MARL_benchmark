@@ -29,8 +29,8 @@ def make_env(args, benchmark=False):
         .action_space       :   Returns the action space for each agent
         .n                  :   Returns the number of Agents
     '''
-    from env.multiagent.environment import MultiAgentEnv
-    import env.multiagent.scenarios as scenarios
+    from Envs.cooperative_navigation.multiagent.environment import MultiAgentEnv
+    import Envs.cooperative_navigation.multiagent.scenarios as scenarios
 
     # load scenario from script
     scenario = scenarios.load(args.scenario + ".py").Scenario()

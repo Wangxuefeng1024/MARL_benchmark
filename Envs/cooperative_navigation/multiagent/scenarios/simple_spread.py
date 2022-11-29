@@ -1,6 +1,6 @@
 import numpy as np
-from env.multiagent.core import World, Agent, Landmark
-from env.multiagent.scenario import BaseScenario
+from Envs.cooperative_navigation.multiagent.core import World, Agent, Landmark
+from Envs.cooperative_navigation.multiagent.scenario import BaseScenario
 
 
 class Scenario(BaseScenario):

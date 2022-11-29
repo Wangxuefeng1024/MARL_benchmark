@@ -13,12 +13,10 @@ def main(args):
     n_agents = args.n_agents
     n_actions = env.world.dim_p
     n_states = env.observation_space[0].shape[0]
-
     # set seed
     torch.manual_seed(args.seed)
 
-
-    writer = SummaryWriter(log_dir='runs/'+ "cooperative+navigation/" + args.algo + "/" + args.log_dir  + str(args.n_agents))
+    writer = SummaryWriter(log_dir='../runs/'+ "cooperative_navigation/" + args.algo + "/" + str(args.n_agents))
 
     # set algorithm
     if args.algo == "maddpg":
@@ -76,23 +74,16 @@ def main(args):
                     next_obs = None
                 rw_tensor = torch.FloatTensor(reward).to(device)
                 ac_tensor = torch.FloatTensor(action).to(device)
-                if args.scenario == 'traffic_junction' and not (
-                        torch.equal(obs, torch.zeros_like(obs)) and torch.equal(obs_, torch.zeros_like(obs))):
-                    model.memory.push(obs.data, ac_tensor, next_obs, rw_tensor, hidden_state, previous_hidden)
+                model.memory.push(obs.data, ac_tensor, next_obs, rw_tensor, hidden_state, previous_hidden)
+
             state = next_state
 
             if args.episode_length < step or not (False in done):
-                c_loss, a_loss = model.update(episode)
-
+                a_loss, c_loss = model.update(episode)
                 print("[Episode %05d] reward %6.4f" % (episode, accum_reward))
-                if not (False in done):
-                    win_times += 1
                 if args.tensorboard:
                     writer.add_scalar(tag='agent/reward', global_step=episode, scalar_value=accum_reward.item())
                     writer.add_scalar(tag='agent/reward_0', global_step=episode, scalar_value=rewardA.item())
-
-                    if args.scenario == "traffic_junction" and episode % 100 == 0:
-                        writer.add_scalar('agent/win_rates', global_step=episode, scalar_value=win_times / 100)
 
                     if c_loss and a_loss:
                         writer.add_scalars('agent/loss', global_step=episode,
@@ -112,15 +103,16 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--scenario', default="multi_walker", type=str,
+    parser.add_argument('--scenario', default="simple_spread", type=str,
                         help="simple_spread/traffic_junction/predator_prey/simple_reference")
     parser.add_argument('--max_episodes', default=100000, type=int)
     parser.add_argument('--n_actions', default=2, type=int)
-    parser.add_argument('--n_agents', default=2, type=int)
+    parser.add_argument('--n_agents', default=3, type=int)
+
     parser.add_argument('--algo', default='maddpg', type=str,
                         help="mhop/eva/eva_2/commnet/maddpg/tarmac/sarnet/eva_4/eva_5/eva_6/eva_7/eva_9/i2cfc/eva_10/dgn")
+
     parser.add_argument('--mode', default="train", type=str, help="train/eval")
-    parser.add_argument('--difficulty', default="medium", type=str, help="easy/medium/hard")
     parser.add_argument('--episode_length', default=50, type=int)
     parser.add_argument('--episode_start_to_train', default=1, type=int)
     parser.add_argument('--memory_length', default=int(3e4), type=int)
