@@ -164,9 +164,9 @@ class MADDPG:
                 soft_update(self.critics_target[i], self.critics[i], self.tau)
                 soft_update(self.actors_target[i], self.actors[i], self.tau)
 
-        return sum(c_loss).item()/self.n_agents, sum(a_loss).item()/self.n_agents
+        return sum(a_loss).item()/self.n_agents, sum(c_loss).item()/self.n_agents
 
-    def choose_action(self, state, noisy=True):
+    def choose_action(self, state, action_mask = None, noisy=True):
 
         obs = torch.from_numpy(np.stack(state)).float().to(device)
 
@@ -177,18 +177,19 @@ class MADDPG:
                 single_obs = obs[i].detach()
                 act = self.actors[i](single_obs.unsqueeze(0)).squeeze()
 
-                if noisy and self.args.scenario == "simple_spread":
-                    act += torch.from_numpy(np.random.randn(2) * self.var[i]).type(FloatTensor)
+                if noisy:
+                    act += torch.from_numpy(np.random.randn(self.args.n_actions) * self.var[i]).type(FloatTensor)
 
                     if self.episode_done > self.episodes_before_train and \
                             self.var[i] > 0.05:
                         self.var[i] *= 0.999998
                 act = torch.clamp(act, -1.0, 1.0)
-
-                actions[i, :] = act
+                if action_mask is not None:
+                    action = torch.zeros_like(act)
+                    action = action + act[action_mask[i]]
+                actions[i, :] = action
             self.steps_done += 1
             return actions.data.cpu().numpy()
-
 class Cen_DDPG:
 
     def __init__(self, s_dim, a_dim, n_agents, args):
