@@ -4,13 +4,19 @@ import torch
 import datetime
 import argparse
 import numpy as np
+from multiagent_mujoco.mujoco_multi import MujocoMulti
 
 from torch.utils.tensorboard import SummaryWriter
 from policy.ddpg import MADDPG, Cen_DDPG
 
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    env = gym.make(args.task)
+    env_args = {"scenario": "args.task",
+                  "agent_conf": "2x3",
+                  "agent_obsk": 0,
+                  "episode_limit": 1000}
+    env = MujocoMulti(env_args=env_args)
+    env_info = env.get_env_info()
     args.n_states = env.observation_space.shape or env.observation_space.n
     args.n_actions = env.action_space.shape or env.action_space.n
     args.max_action = env.action_space.high[0]
@@ -41,12 +47,26 @@ def main(args):
     total_step = 0
     win_times = 0
     while episode < args.max_episodes:
-        state = env.reset()
+        env.reset()
+        terminated = False
+        episode_reward = 0
         episode += 1
         step = 0
         accum_reward = 0
         rewardA = 0
-        while True:
+        while not terminated:
+            obs = env.get_obs()
+            state = env.get_state()
+            actions = []
+            for agent_id in range(n_agents):
+                avail_actions = env.get_avail_agent_actions(agent_id)
+                avail_actions_ind = np.nonzero(avail_actions)[0]
+                action = np.random.uniform(-1.0, 1.0, n_actions)
+                actions.append(action)
+
+            reward, terminated, _ = env.step(actions)
+            episode_reward += reward
+            env.render()
             if args.algo == "tarmac":
                 action, hidden_state, previous_hidden = model.choose_action(state, noisy=True)
             else:
@@ -134,11 +154,11 @@ if __name__ == '__main__':
     parser.add_argument('--tau', type=float, default=0.1)
     parser.add_argument('--exploration-noise', type=float, default=0.1)
     parser.add_argument("--start-timesteps", type=int, default=25000)
-    parser.add_argument('--epoch', type=int, default=200)
+    parser.add_argument('--max_episodes', type=int, default=50000)
     parser.add_argument('--step-per-epoch', type=int, default=50000)
     parser.add_argument('--step-per-collect', type=int, default=2000)
     parser.add_argument('--update-per-step', type=int, default=0.025)
-    parser.add_argument('--n-step', type=int, default=5)
+    parser.add_argument('--n-step', type=int, default=100)
     parser.add_argument('--batch-size', type=int, default=1000)
     parser.add_argument('--episode_before_train', type=int, default=0)
     # parser.add_argument('--test-num', type=int, default=10)
