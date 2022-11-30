@@ -3,50 +3,38 @@
 This repository contains an RL environment based on open-source game Gameplay Football.
 It was created by the Google Brain team for research purposes.
 
+![](https://github.com/Wangxuefeng1024/MARL_benchmark/blob/main/results/episode_done_20221108-154022258943.gif)
 
-## Environments
-- [StarCraft Multi-Agent Challenge (SMAC)](https://github.com/oxwhirl/smac),
-- [Multi-Agent Particle Environment (MPE)](https://github.com/openai/multiagent-particle-envs),
-- [Traffic Junction (TJ)](https://github.com/IC3Net/IC3Net),
-- [Google Research Football (GRF)](https://github.com/google-research/football),
-- [Multi-agent Mujoco](https://github.com/schroederdewitt/multiagent_mujoco),
-- Payoff Matrix
 
-## Corresponding Algorithms
-- [Value-Decomposition Networks For Cooperative Multi-Agent Learning (VDN)](https://arxiv.org/abs/1706.05296)
+## Baselines
 - [QMIX: Monotonic Value Function Factorisation for Deep Multi-Agent Reinforcement Learning (QMIX)](https://arxiv.org/abs/1803.11485)
-- [Multi-Agent Actor-Critic for Mixed Cooperative-Competitive Environments (MADDPG)](https://arxiv.org/pdf/1706.02275.pdf)
-- [Weighted QMIX: Expanding Monotonic Value Function Factorisation (WQMIX)](https://arxiv.org/abs/2006.10800) 
-- [TarMAC: Targeted Multi-Agent Communication](http://proceedings.mlr.press/v97/das19a/das19a.pdf)
 
-## TODO List
+## Results
 
-- [ ] Qtran
-- [ ] PAC
-- [ ] Model-based algorithms
-- [ ] Other SOTA MARL algorithms
-- [ ] Update results
+<img src="https://github.com/Wangxuefeng1024/MARL_benchmark/blob/main/results/3vs1_winrates.png" width="300px"> <img src="https://github.com/Wangxuefeng1024/MARL_benchmark/blob/main/results/rps_winrate.png" width="300px"> <img src="https://github.com/Wangxuefeng1024/MARL_benchmark/blob/main/results/ps_winrates.png" width="300px"> 
 
-## Code Structure
 
-- `./scripts`: contains code for runnning the training code.
 
-- `./runs`: contains training logs
+## Getting Started
 
-- `./Envs`: contains environment files are used throughout the code. And installation procedure for each one.
+### requirement
 
-- `./model`: used for saving the trained models.
+- gym-0.11.0
+- [gfootball](https://github.com/google-research/football)
 
-- `./network`: neural network for each algorithm.
+### reference
 
-- `./policy`: contains the algorithms of DQN, PPO, DDPG, REINFORCE.
+We follow the following observation & reward wrapper:
 
-## Quick Start
+https://github.com/PKU-MARL/Multi-Agent-Transformer
+
+### quick start
 
 ```shell
-$ python scripts/sc_main.py --map=3m --algo=qmix
+$ python runner/football_runner.py --algo qmix --scenario academy_3_vs_1_with_keeper
 ```
 
-Directly run the `sc_main.py`, then the algorithm will start **training** on map `3m`. 
+
+
 
 
