@@ -17,7 +17,7 @@ torch.set_num_threads(cpu_num)
 from policy.commnet import TJ_CommNet
 from policy.tarmac import TJ_TarMAC
 
-from Envs.tj.traffic_junction_env import TrafficJunctionEnv
+from envs.tj.traffic_junction_env import TrafficJunctionEnv
 
 from utils.util import _flatten_obs
 

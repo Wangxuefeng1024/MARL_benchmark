@@ -13,6 +13,7 @@ class Actor(nn.Module):
         self.args = args
         self.dim_obs = dim_observation
         self.hidden_state = torch.zeros(args.n_agents, args.rnn_hidden_size).to(device)
+        self.previous_state = torch.zeros(args.n_agents, args.rnn_hidden_size).to(device)
         # self.FC1 = nn.Linear(dim_observation + args.rnn_hidden_size, args.rnn_hidden_size)
 
         # GRU policy
@@ -80,9 +81,10 @@ class Actor(nn.Module):
             result_2 = F.softmax(self.FC3(result_2), dim=-1).squeeze()
         # result_2 = F.tanh(self.FC3(result_2)).squeeze()
         # remember replace the hidden state
-        if batch_size == 1:
+        if batch_size == 1 and self.args.scenario != "traffic_junction":
+            self.previous_state = self.hidden_state.squeeze()
             self.hidden_state = final_hidden.squeeze()
-            return result_2
+            return result_2, self.hidden_state, self.previous_state
         else:
             return result_2
 
@@ -154,4 +156,4 @@ class Critic(nn.Module):
         result_2 = F.relu(self.FC2(result_2))
         value = self.FC3(result_2)
 
-        return value, final_hidden
+        return value

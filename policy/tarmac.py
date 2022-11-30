@@ -83,9 +83,9 @@ class TarMAC():
         with torch.no_grad():
             action, hidden_state, previous_hidden = self.actor(obs)
         action = action.detach().cpu().numpy()
-        if noisy and self.args.scenario == "simple_spread":
+        if noisy:
             for agent_idx in range(self.n_agents):
-                action[agent_idx] += np.random.randn(2) * self.var[agent_idx]
+                action[agent_idx] += np.random.randn(self.a_dim) * self.var[agent_idx]
 
                 if self.var[agent_idx] > 0.05:
                     self.var[agent_idx] *= 0.999998  # 0.999998
@@ -130,8 +130,8 @@ class TarMAC():
         self.critic.zero_grad()
         whole_state = whole_state.view(self.batch_size, -1)
         non_final_next_states = non_final_next_states.view(self.batch_size, -1)
-        current_Q = self.critic(whole_state, whole_action, previous_hidden).view(-1, self.n_agents)
-        target_Q = self.critic_target(non_final_next_states, next_whole_batch, hidden_states).view(-1,
+        current_Q = self.critic(whole_state, previous_hidden).view(-1, self.n_agents)
+        target_Q = self.critic_target(non_final_next_states, hidden_states).view(-1,
                                                                                                    self.n_agents)  # .view(-1, self.n_agents * self.n_actions)
         target_Q = target_Q * self.GAMMA + reward_batch
         loss_Q = nn.MSELoss()(current_Q, target_Q.detach())
@@ -145,7 +145,7 @@ class TarMAC():
         self.critic.zero_grad()
 
         whole_action = self.actor(whole_state, hidden_data=previous_hidden).view(self.batch_size, -1)
-        actor_loss = -self.critic(whole_state, whole_action, previous_hidden).mean() * 0.3
+        actor_loss = -self.critic(whole_state, previous_hidden).mean() * 0.3
         actor_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 1)
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 1)

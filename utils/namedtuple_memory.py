@@ -5,7 +5,7 @@ Experience = namedtuple('Experience',
 						('states', 'actions', 'next_states', 'rewards'))
 
 Experience_rnn = namedtuple('Experience',
-						('states', 'actions', 'next_states', 'rewards', 'data', 'hidden_states', 'previous_hidden'))
+						('states', 'actions', 'next_states', 'rewards', 'hidden_states', 'previous_hidden'))
 
 class ReplayMemory:
     def __init__(self, capacity):

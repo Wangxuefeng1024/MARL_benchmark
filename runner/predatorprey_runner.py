@@ -1,9 +1,12 @@
+import sys
+sys.path.append('../')
 import torch
 import numpy as np
 import datetime
 import argparse
-from Envs.predator_prey.make_env import pp_make_env
-from policy.ddpg import MADDPG, Cen_DDPG
+from envs.predator_prey.make_env import pp_make_env
+from policy.ddpg import MADDPG
+from policy.tarmac import TarMAC
 from tensorboardX import SummaryWriter
 from utils.utils import reward_from_state
 
@@ -24,13 +27,13 @@ def main(args):
     if args.algo == "maddpg":
         model = MADDPG(n_states, n_actions, n_agents, args)
     else:
-        model = Cen_DDPG(n_states, n_actions, n_agents, args)
+        model = TarMAC(n_states, n_actions, n_agents, args)
 
     print(model)
 
     episode = 0
     total_step = 0
-    win_times = 0
+
     while episode < args.max_episodes:
         state = env.reset()
         episode += 1
@@ -76,8 +79,7 @@ def main(args):
                     next_obs = None
                 rw_tensor = torch.FloatTensor(reward).to(device)
                 ac_tensor = torch.FloatTensor(action).to(device)
-                if args.scenario == 'traffic_junction' and not (
-                        torch.equal(obs, torch.zeros_like(obs)) and torch.equal(obs_, torch.zeros_like(obs))):
+                if next_obs is not None:
                     model.memory.push(obs.data, ac_tensor, next_obs, rw_tensor, hidden_state, previous_hidden)
             state = next_state
 
@@ -112,7 +114,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_episodes', default=100000, type=int)
     parser.add_argument('--n_actions', default=5, type=int)
     parser.add_argument('--n_agents', default=3, type=int)
-    parser.add_argument('--algo', default='maddpg', type=str,
+    parser.add_argument('--algo', default='tarmac', type=str,
                         help="mhop/eva/eva_2/commnet/maddpg/tarmac/sarnet/eva_4/eva_5/eva_6/eva_7/eva_9/i2cfc/eva_10/dgn")
     parser.add_argument('--mode', default="train", type=str, help="train/eval")
     parser.add_argument('--difficulty', default="medium", type=str, help="easy/medium/hard")

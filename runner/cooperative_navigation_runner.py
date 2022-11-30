@@ -1,9 +1,12 @@
+import sys
+sys.path.append('../')
 import torch
 import numpy as np
 import datetime
 import argparse
-from Envs.cooperative_navigation.make_env import make_env
-from policy.ddpg import MADDPG, Cen_DDPG
+from envs.cooperative_navigation.make_env import make_env
+from policy.ddpg import MADDPG
+from policy.tarmac import TarMAC
 from tensorboardX import SummaryWriter
 from utils.utils import reward_from_state
 
@@ -22,7 +25,7 @@ def main(args):
     if args.algo == "maddpg":
         model = MADDPG(n_states, n_actions, n_agents, args)
     else:
-        model = Cen_DDPG(n_states, n_actions, n_agents, args)
+        model = TarMAC(n_states, n_actions, n_agents, args)
 
     print(model)
 
@@ -74,7 +77,8 @@ def main(args):
                     next_obs = None
                 rw_tensor = torch.FloatTensor(reward).to(device)
                 ac_tensor = torch.FloatTensor(action).to(device)
-                model.memory.push(obs.data, ac_tensor, next_obs, rw_tensor, hidden_state, previous_hidden)
+                if next_obs is not None:
+                    model.memory.push(obs.data, ac_tensor, next_obs, rw_tensor, hidden_state, previous_hidden)
 
             state = next_state
 
