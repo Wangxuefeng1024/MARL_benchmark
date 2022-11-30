@@ -1,6 +1,6 @@
 import torch
 from tensorboardX import SummaryWriter
-from Envs.football.football_env import FootballEnv
+from envs.football.football_env import FootballEnv
 from policy.qmix import gfoot_qmix
 from policy.ppo import MAPPO_GRF
 import argparse
