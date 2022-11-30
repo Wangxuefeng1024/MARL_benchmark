@@ -1,7 +1,8 @@
-# MARL Benchmarks
+# Google Football Research
 
-Hi there! This repository collects some popular MARL environments, and implements several algorithms on top of them.
-I provide detailed information for each environment, you can check it under its directory.
+This repository contains an RL environment based on open-source game Gameplay Football.
+It was created by the Google Brain team for research purposes.
+
 
 ## Environments
 - [StarCraft Multi-Agent Challenge (SMAC)](https://github.com/oxwhirl/smac),
