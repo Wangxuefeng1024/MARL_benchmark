@@ -27,7 +27,7 @@ I provide detailed information for each environment, you can check it under its 
 
 ## Code Structure
 
-- `./scripts`: contains code for runnning the training code.
+- `./scripts`: contains code for runnning the training code and introduction of the setting of each environment.
 
 - `./runs`: contains training logs
 
