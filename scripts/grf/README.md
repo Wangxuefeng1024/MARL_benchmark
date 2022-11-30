@@ -24,7 +24,7 @@ It was created by the Google Brain team for research purposes.
 
 ### reference
 
-We follow the following observation & reward wrapper:
+We set the observation & reward wrapper as following repo:
 
 https://github.com/PKU-MARL/Multi-Agent-Transformer
 
