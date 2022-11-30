@@ -20,8 +20,7 @@ I provide detailed information for each environment, you can check it under its 
 
 ## TODO List
 
-- [ ] Qtran
-- [ ] PAC
+- [X] PAC
 - [ ] Model-based algorithms
 - [ ] Other SOTA MARL algorithms
 - [ ] Update results
