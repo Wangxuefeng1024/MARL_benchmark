@@ -2,20 +2,20 @@ import torch
 from tensorboardX import SummaryWriter
 from envs.football.football_env import FootballEnv
 from policy.qmix import gfoot_qmix
-from policy.ppo import MAPPO_GRF
 import argparse
 import numpy as np
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def main(args):
-    BoolTensor = torch.cuda.BoolTensor if args.cuda else torch.BoolTensor
-    FloatTensor = torch.cuda.FloatTensor if args.cuda else torch.FloatTensor
+    # set seed
     torch.manual_seed(args.seed)
+
+    # set tensorboard
     if args.tensorboard:
         writer = SummaryWriter(
             log_dir='../runs/' + args.algo + "/" + args.scenario)
+
     # create environments
-    # set the number of agents of the scenario
     if args.scenario == 'academy_pass_and_shoot_with_keeper':
         args.n_agents = 2
         args.obs_shape = 98
@@ -27,6 +27,7 @@ def main(args):
         args.obs_shape = 98
         args.n_states = args.obs_shape*args.n_agents
         args.episode_limit = 200
+
     elif args.scenario == 'academy_3_vs_1_with_keeper':
         args.n_agents = 3
         args.obs_shape = 105
@@ -34,23 +35,22 @@ def main(args):
         args.episode_limit = 250
     else:
         args.n_agents = 2
-
         args.obs_shape = 115
         args.n_states = args.obs_shape*args.n_agents
 
     env = FootballEnv(args=args)
+
     # create model
     if args.algo == "qmix":
         model = gfoot_qmix(env, args)
-
-    elif args.algo == "mappo":
-        model = MAPPO_GRF(env, args)
     else:
         model = gfoot_qmix(env, args)
     print(model)
 
     time_steps, train_steps, evaluate_steps = 0, 0, -1
     total_rewards = 0
+
+    # generate episodic rollout and store into the replay buffer
     while time_steps < args.max_steps:
         print("[time_steps %05d] reward %6.4f" % (time_steps, total_rewards))
         episodes = []
@@ -77,14 +77,10 @@ def main(args):
         model.buffer.store_episode(episode_batch)
         writer.add_scalar(tag='agent/rewards', global_step=time_steps, scalar_value=total_rewards)
         for train_step in range(args.train_steps):
-            if args.algo != "mappo":
-                mini_batch = model.buffer.sample(min(model.buffer.current_size, model.args.batch_size))
-                loss = model.train(mini_batch, train_steps)
-                writer.add_scalar(tag='agent/loss', global_step=time_steps, scalar_value=loss)
-            if args.algo == "mappo":
-                model.train()
+            mini_batch = model.buffer.sample(min(model.buffer.current_size, model.args.batch_size))
+            loss = model.train(mini_batch, train_steps)
+            writer.add_scalar(tag='agent/loss', global_step=time_steps, scalar_value=loss)
             train_steps += 1
-
         if train_steps % args.save_cycle == 0:
             model.save_model(train_steps)
         train_steps += 1
@@ -97,30 +93,22 @@ def main(args):
 def _t2n(x):
     return x.detach().cpu().numpy()
 
-
-
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     # the environment setting
-    parser.add_argument('--difficulty', type=str, default='5', help='the difficulty of the game')
     parser.add_argument('--scenario', type=str, default='academy_3_vs_1_with_keeper', help='academy_pass_and_shoot_with_keeper, academy_run_pass_and_shoot_with_keeper, academy_3_vs_1_with_keeper')
-    parser.add_argument('--reward', type=str, default='scoring', help='the map of the game')
-
-    parser.add_argument('--game_version', type=str, default='latest', help='the version of the game')
-    parser.add_argument('--map', type=str, default='5m_vs_6m', help='the map of the game')
+    parser.add_argument('--reward', type=str, default='scoring', help='the reward type of the game')
     parser.add_argument('--seed', type=int, default=123, help='random seed')
 
     parser.add_argument('--rnn_hidden_dim', type=int, default=64, help='rnn dimension')
     parser.add_argument('--n_actions', type=int, default=19, help='number of actions')
     parser.add_argument('--hyper_hidden_dim', type=int, default=64, help='hyper dimension')
     parser.add_argument('--qmix_hidden_dim', type=int, default=32, help='qmix dimension')
-    parser.add_argument('--critic_dim', type=int, default=128, help='critic dimension')
     parser.add_argument('--step_mul', type=int, default=8, help='how many steps to make an action')
-    parser.add_argument('--n_agents', type=int, default=3, help='how many steps to make an action')
     parser.add_argument('--replay_dir', type=str, default='', help='absolute path to save the replay')
-    parser.add_argument('--test_episodes', type=int, default=20, help='random seed')
-    parser.add_argument('--train_steps', type=int, default=1, help='random seed')
+    parser.add_argument('--test_episodes', type=int, default=20, help='how many episodes need to evaluate')
+
     parser.add_argument('--rnn_hidden_size', type=int, default=64, help='random seed')
 
     parser.add_argument('--algo', type=str, default='qmix', help='the algorithm to train the agent')

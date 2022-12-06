@@ -1,8 +1,9 @@
-from Envs.payoff_matrix.one_step_payoff_matrix import OneStepPayOffMatrix
-from Envs.payoff_matrix.two_step_payoff_matrix import TwoStepPayOffMatrix
-from Envs.payoff_matrix.two_state_payoff_matrix import TwoStatePayOffMatrix
+from envs.payoff_matrix.one_step_payoff_matrix import OneStepPayOffMatrix
+from envs.payoff_matrix.two_step_payoff_matrix import TwoStepPayOffMatrix
+from envs.payoff_matrix.two_state_payoff_matrix import TwoStatePayOffMatrix
 from policy.qmix import QMIX
 from policy.vdn import VDN
+from policy.pac import PAC
 import argparse
 
 # Hyperparameters
@@ -10,13 +11,6 @@ learning_rate = 0.0005
 gamma = 0.98
 buffer_limit = 50000
 batch_size = 32
-
-
-# def init_hidden(episode_num):
-#     # 为每个episode中的每个agent都初始化一个eval_hidden、target_hidden
-#     eval_hidden = torch.zeros((episode_num, n_agents, args.rnn_hidden_dim))
-#     target_hidden = torch.zeros((episode_num, n_agents, self.args.rnn_hidden_dim))
-
 
 def run(self):
     step = 0
@@ -181,6 +175,12 @@ def main(args):
         args.n_actions = 2
         value_list = [[7., 7., 7., 7.], [0., 1., 1., 8.]]
         env = TwoStepPayOffMatrix(value_list=value_list)
+    elif args.env_name == 'two_state_payoff_matrix':
+        args.state_shape = 4
+        args.obs_shape = 4
+        args.n_actions = 2
+        value_list = [[7., 7., 7., 7.], [0., 1., 1., 8.]]
+        env = TwoStatePayOffMatrix(value_list=value_list)
     else:
         raise Exception("Wrong env name.")
     print()
@@ -192,6 +192,8 @@ def main(args):
         runner = VDN(env, args)
     elif args.algo == "qmix":
         runner = QMIX(env, args)
+    elif args.algo == "pac":
+        runner = PAC(env, args)
     if args.play:
         play(runner)
     else:
