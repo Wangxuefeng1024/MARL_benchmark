@@ -141,7 +141,6 @@ if __name__ == '__main__':
     parser.add_argument('--buffer_size', type=int, default=int(1e4), help='buffer size')
     parser.add_argument('--k_epochs', type=int, default=8, help='buffer size')
 
-
     parser.add_argument('--model_dir', type=str, default='./model', help='model directory of the policy')
     parser.add_argument('--result_dir', type=str, default='./result', help='result directory of the policy')
     parser.add_argument('--load_model', type=bool, default=False, help='whether to load the pretrained model')

@@ -1,3 +1,7 @@
+import torch
+from tensorboardX import SummaryWriter
+import numpy as np
+
 from envs.payoff_matrix.one_step_payoff_matrix import OneStepPayOffMatrix
 from envs.payoff_matrix.two_step_payoff_matrix import TwoStepPayOffMatrix
 from envs.payoff_matrix.two_state_payoff_matrix import TwoStatePayOffMatrix
@@ -12,42 +16,73 @@ gamma = 0.98
 buffer_limit = 50000
 batch_size = 32
 
-def run(self):
+def main(args):
+    # set seed
+    torch.manual_seed(args.seed)
+    # set tensorboard
+    if args.tensorboard:
+        writer = SummaryWriter(
+            log_dir='../runs/' + args.algo + "/" + args.env_name)
+    if args.env_name == 'one_step_payoff_matrix':
+        args.state_shape = 2
+
+        args.obs_shape = 2
+        args.n_actions = 3
+        value_list = [10.4, 0., 10., 0., 10., 10., 10., 10., 10.]
+        env = OneStepPayOffMatrix(value_list=value_list)
+    elif args.env_name == 'two_step_payoff_matrix':
+        args.state_shape = 4
+        args.obs_shape = 4
+        args.n_actions = 2
+        value_list = [[7., 7., 7., 7.], [0., 1., 1., 8.]]
+        env = TwoStepPayOffMatrix(value_list=value_list)
+    elif args.env_name == 'two_state_payoff_matrix':
+        args.state_shape = 2
+        args.n_states = args.state_shape
+        args.obs_shape = 2
+        args.n_actions = 3
+        value_list = [[4, -2, -2, -2, 0, 0, -2, 0, 0], [-2, 0, 0, 4, -2, -2, -2, 0, 0]]
+        env = TwoStatePayOffMatrix(value_list=value_list)
+    else:
+        raise Exception("Wrong env name.")
+    print()
+    print("* Environment Name: {}".format(args.env_name))
+    print("* Initial Value List: {}".format(value_list))
+    print()
     step = 0
-    while step < self.training_steps:
-        state, observations = self.env.reset()
+    # create model
+    if args.algo == "qmix":
+        model = QMIX(env, args)
+    else:
+        model = VDN(env, args)
+    print(model)
+
+    time_steps, train_steps, evaluate_steps = 0, 0, -1
+    while time_steps < args.max_steps:
+        state, observations = env.reset()
         done = False
-        if self.args.base_net == 'rnn':
-            h_out = self.init_hidden(self.args)
+        h_out = model.init_hidden(1)
         while not done:
-            if self.args.base_net == 'rnn':
-                h_in = h_out
-                actions, h_out = self.agents.choose_action(observations, h_in)
-            else:
-                actions = self.agents.choose_action(observations)
-            next_state, next_observations, reward, done = self.env.step(actions)
+            h_in = h_out
+            actions, h_out = model.choose_action(observations, h_in)
+
+            next_state, next_observations, reward, done = env.step(actions)
             print('step: {0}, state: {1}, actions: {2}, reward: {3}'.format(step, state, actions, reward))
             done_mask = 0.0 if done else 1.0
 
-            if self.args.base_net == 'rnn':
-                self.replay_memory.put(
-                    [state, observations, actions, reward, next_state, next_observations, h_in, h_out, done_mask]
-                )
-            else:
-                self.replay_memory.put(
-                    [state, observations, actions, reward, next_state, next_observations, done_mask]
-                )
 
-            if self.replay_memory.size() >= self.args.batch_size:
+            model.replay_memory.put(
+                [state, observations, actions, reward, next_state, next_observations, h_in, h_out, done_mask]
+            )
+
+
+            if model.replay_memory.size() >= args.batch_size:
                 batch = {}
-                if self.args.base_net == 'rnn':
-                    s, o, a, r, s_prime, o_prime, hidden_in, hidden_out, done_mask = self.replay_memory.sample(
-                        self.args.batch_size
-                    )
-                    batch['hidden_in'] = hidden_in
-                    batch['hidden_out'] = hidden_out
-                else:
-                    s, o, a, r, s_prime, o_prime, done_mask = self.replay_memory.sample(self.args.batch_size)
+                s, o, a, r, s_prime, o_prime, hidden_in, hidden_out, done_mask = model.replay_memory.sample(
+                    args.batch_size
+                )
+                batch['hidden_in'] = hidden_in
+                batch['hidden_out'] = hidden_out
                 batch['state'] = s
                 batch['observation'] = o
                 batch['action'] = a
@@ -56,9 +91,9 @@ def run(self):
                 batch['next_observation'] = o_prime
                 batch['done_mask'] = done_mask
 
-                loss = self.agents.train(batch, step)
+                loss = model.train(batch, step)
 
-                if step % self.args.print_interval == 0:
+                if step % args.print_interval == 0:
                     print("step: {0}, loss: {1}".format(step, loss))
 
             state = next_state
@@ -67,10 +102,10 @@ def run(self):
 
             if done:
                 break
-    self.agents.save_model()
+    model.save_model()
 
 
-def play(self):
+def play(args, model):
     self.agents.load_model()
 
     q_value_list, iteration, selected_q_value_list, q_value_list_0, q_value_list_1, q_value_list_2, \
@@ -101,17 +136,14 @@ def play(self):
         state, observations = self.env.reset()
         done = False
 
-        if self.args.base_net == 'rnn':
-            h_out = self.init_hidden(self.args)
+
+        h_out = self.init_hidden(self.args)
         state_num = 0
         while not done:
-            if self.args.base_net == 'rnn':
-                h_in = h_out
-                actions, h_out, q_total_evals = self.agents.choose_action(observations, h_in=h_in, state=state)
-            else:
-                actions, q_total_evals = self.agents.choose_action(observations, state=state)
-            next_state, next_observations, reward, done = self.env.step(actions)
 
+            h_in = h_out
+            actions, h_out, q_total_evals = self.agents.choose_action(observations, h_in=h_in, state=state)
+            next_state, next_observations, reward, done = self.env.step(actions)
             state = next_state
             observations = next_observations
 
@@ -155,55 +187,54 @@ def play(self):
         print(q_value_list_2)
 
 
-def main(args):
-    # One Step Pay-off Matrix or Two Step Pay-off Matrix
-    if args.env_name == 'one_step_payoff_matrix_1':
-        args.state_shape = 2
-        args.obs_shape = 2
-        args.n_actions = 3
-        value_list = [10.4, 0., 10., 0., 10., 10., 10., 10., 10.]
-        env = OneStepPayOffMatrix(value_list=value_list)
-    elif args.env_name == 'one_step_payoff_matrix_2':
-        args.state_shape = 2
-        args.obs_shape = 2
-        args.n_actions = 3
-        value_list = [8., -12., -12., -12., 0., 0., -12., 0., 0.]
-        env = OneStepPayOffMatrix(value_list=value_list)
-    elif args.env_name == 'two_step_payoff_matrix':
-        args.state_shape = 4
-        args.obs_shape = 4
-        args.n_actions = 2
-        value_list = [[7., 7., 7., 7.], [0., 1., 1., 8.]]
-        env = TwoStepPayOffMatrix(value_list=value_list)
-    elif args.env_name == 'two_state_payoff_matrix':
-        args.state_shape = 4
-        args.obs_shape = 4
-        args.n_actions = 2
-        value_list = [[7., 7., 7., 7.], [0., 1., 1., 8.]]
-        env = TwoStatePayOffMatrix(value_list=value_list)
-    else:
-        raise Exception("Wrong env name.")
-    print()
-    print("* Environment Name: {}".format(args.env_name))
-    print("* Initial Value List: {}".format(value_list))
-    print()
-
-    if args.algo == "vdn":
-        runner = VDN(env, args)
-    elif args.algo == "qmix":
-        runner = QMIX(env, args)
-    elif args.algo == "pac":
-        runner = PAC(env, args)
-    if args.play:
-        play(runner)
-    else:
-        run(runner)
+# def main(args):
+#     # One Step Pay-off Matrix or Two Step Pay-off Matrix
+#     if args.env_name == 'one_step_payoff_matrix_1':
+#         args.state_shape = 2
+#         args.obs_shape = 2
+#         args.n_actions = 3
+#         value_list = [10.4, 0., 10., 0., 10., 10., 10., 10., 10.]
+#         env = OneStepPayOffMatrix(value_list=value_list)
+#     elif args.env_name == 'one_step_payoff_matrix_2':
+#         args.state_shape = 2
+#         args.obs_shape = 2
+#         args.n_actions = 3
+#         value_list = [8., -12., -12., -12., 0., 0., -12., 0., 0.]
+#         env = OneStepPayOffMatrix(value_list=value_list)
+#     elif args.env_name == 'two_step_payoff_matrix':
+#         args.state_shape = 4
+#         args.obs_shape = 4
+#         args.n_actions = 2
+#         value_list = [[7., 7., 7., 7.], [0., 1., 1., 8.]]
+#         env = TwoStepPayOffMatrix(value_list=value_list)
+#     elif args.env_name == 'two_state_payoff_matrix':
+#         args.state_shape = 4
+#         args.obs_shape = 4
+#         args.n_actions = 2
+#         value_list = [[7., 7., 7., 7.], [0., 1., 1., 8.]]
+#         env = TwoStatePayOffMatrix(value_list=value_list)
+#     else:
+#         raise Exception("Wrong env name.")
+#     print()
+#     print("* Environment Name: {}".format(args.env_name))
+#     print("* Initial Value List: {}".format(value_list))
+#     print()
+#
+#     if args.algo == "vdn":
+#         runner = VDN(env, args)
+#     elif args.algo == "qmix":
+#         runner = QMIX(env, args)
+#     elif args.algo == "pac":
+#         runner = PAC(env, args)
+#     if args.play:
+#         play(runner)
+#     else:
+#         run(runner)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # the environment setting
-    parser.add_argument('--difficulty', type=str, default='5', help='the difficulty of the game')
     parser.add_argument('--game_version', type=str, default='latest', help='the version of the game')
     parser.add_argument('--env_name', type=str, default='two_state_payoff_matrix', help='two_state_payoff_matrix')
     parser.add_argument('--seed', type=int, default=123, help='random seed')
@@ -260,4 +291,4 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cpu')
 
     args = parser.parse_args()
-    run(args)
+    main(args)

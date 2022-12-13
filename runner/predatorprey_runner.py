@@ -21,7 +21,7 @@ def main(args):
     torch.manual_seed(args.seed)
 
     # set tensorboard writer
-    writer = SummaryWriter(log_dir='runs/'+ "predator_prey/" + args.algo + "/" + args.log_dir  + str(args.n_agents))
+    writer = SummaryWriter(log_dir='../runs/'+ "predator_prey/" + args.algo + "/" + args.log_dir  + str(args.n_agents))
 
     # set algorithm
     if args.algo == "maddpg":
