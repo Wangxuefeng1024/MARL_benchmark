@@ -1,51 +1,33 @@
-# MARL Benchmarks
+# Multi Walker
 
-Hi there! This repository collects some popular MARL environments, and implements several algorithms on top of them.
-I provide detailed information for each environment, you can check it under its directory.
+This environment is part of the [SISL environments](https://pettingzoo.farama.org/environments/sisl/). In this environment, bipedal robots attempt to carry a package placed on top of them towards the right. By default, the number of robots is set to 3.
 
-## Environments
-- [StarCraft Multi-Agent Challenge (SMAC)](https://github.com/oxwhirl/smac),
-- [Multi-Agent Particle Environment (MPE)](https://github.com/openai/multiagent-particle-envs),
-- [Traffic Junction (TJ)](https://github.com/IC3Net/IC3Net),
-- [Google Research Football (GRF)](https://github.com/google-research/football),
-- [Multi-agent Mujoco](https://github.com/schroederdewitt/multiagent_mujoco),
-- Payoff Matrix
+Each walker receives a reward equal to the change in position of the package from the previous timestep, multiplied by the forward_reward scaling factor. The maximum achievable total reward depends on the terrain length; as a reference, for a terrain length of 75, the total reward under an optimal policy is around 300.
 
-## Corresponding Algorithms
-- [Value-Decomposition Networks For Cooperative Multi-Agent Learning (VDN)](https://arxiv.org/abs/1706.05296)
-- [QMIX: Monotonic Value Function Factorisation for Deep Multi-Agent Reinforcement Learning (QMIX)](https://arxiv.org/abs/1803.11485)
+![](https://github.com/Wangxuefeng1024/MARL_benchmark/blob/main/results/sisl_multiwalker.gif)
+
+## Baselines
 - [Multi-Agent Actor-Critic for Mixed Cooperative-Competitive Environments (MADDPG)](https://arxiv.org/pdf/1706.02275.pdf)
-- [Weighted QMIX: Expanding Monotonic Value Function Factorisation (WQMIX)](https://arxiv.org/abs/2006.10800) 
-- [TarMAC: Targeted Multi-Agent Communication](http://proceedings.mlr.press/v97/das19a/das19a.pdf)
+- [TarMAC: Targeted Multi-Agent Communication (TarMAC)](http://proceedings.mlr.press/v97/das19a/das19a.pdf)
 
-## TODO List
+## Results
 
-- [ ] Qtran
-- [ ] PAC
-- [ ] Model-based algorithms
-- [ ] Other SOTA MARL algorithms
-- [ ] Update results
+![](https://github.com/Wangxuefeng1024/MARL_benchmark/blob/main/results/muilti_walker.png)
 
-## Code Structure
 
-- `./scripts`: contains code for runnning the training code.
+## Getting Started
 
-- `./runs`: contains training logs
-
-- `./Envs`: contains environment files are used throughout the code. And installation procedure for each one.
-
-- `./model`: used for saving the trained models.
-
-- `./network`: neural network for each algorithm.
-
-- `./policy`: contains the algorithms of DQN, PPO, DDPG, REINFORCE.
-
-## Quick Start
+### requirement
 
 ```shell
-$ python scripts/sc_main.py --map=3m --algo=qmix
+$ gym == 0.10.8
+$ pettingzoo
+```
+### quick start
+
+```shell
+$ python runner/multiwalker_runner.py --algo tarmac --n_agent 3
 ```
 
-Directly run the `sc_main.py`, then the algorithm will start **training** on map `3m`. 
 
 
