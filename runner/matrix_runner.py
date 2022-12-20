@@ -5,7 +5,7 @@ import numpy as np
 from envs.payoff_matrix.one_step_payoff_matrix import OneStepPayOffMatrix
 from envs.payoff_matrix.two_step_payoff_matrix import TwoStepPayOffMatrix
 from envs.payoff_matrix.two_state_payoff_matrix import TwoStatePayOffMatrix
-from policy.qmix import QMIX
+from policy.qmix import QMIX_matrix
 from policy.vdn import VDN
 from policy.pac import PAC
 import argparse
@@ -23,16 +23,20 @@ def main(args):
     if args.tensorboard:
         writer = SummaryWriter(
             log_dir='../runs/' + args.algo + "/" + args.env_name)
+    args.map = args.env_name
     if args.env_name == 'one_step_payoff_matrix':
         args.state_shape = 2
-
+        args.n_states = args.state_shape
         args.obs_shape = 2
+        args.n_obs = args.obs_shape
         args.n_actions = 3
         value_list = [10.4, 0., 10., 0., 10., 10., 10., 10., 10.]
         env = OneStepPayOffMatrix(value_list=value_list)
     elif args.env_name == 'two_step_payoff_matrix':
         args.state_shape = 4
         args.obs_shape = 4
+        args.n_states = args.state_shape
+        args.n_obs = args.obs_shape
         args.n_actions = 2
         value_list = [[7., 7., 7., 7.], [0., 1., 1., 8.]]
         env = TwoStepPayOffMatrix(value_list=value_list)
@@ -40,6 +44,7 @@ def main(args):
         args.state_shape = 2
         args.n_states = args.state_shape
         args.obs_shape = 2
+        args.n_obs = args.obs_shape
         args.n_actions = 3
         value_list = [[4, -2, -2, -2, 0, 0, -2, 0, 0], [-2, 0, 0, 4, -2, -2, -2, 0, 0]]
         env = TwoStatePayOffMatrix(value_list=value_list)
@@ -52,7 +57,7 @@ def main(args):
     step = 0
     # create model
     if args.algo == "qmix":
-        model = QMIX(env, args)
+        model = QMIX_matrix(env, args)
     else:
         model = VDN(env, args)
     print(model)
@@ -61,9 +66,9 @@ def main(args):
     while time_steps < args.max_steps:
         state, observations = env.reset()
         done = False
-        h_out = model.init_hidden(1)
+        model.init_hidden(1)
         while not done:
-            h_in = h_out
+            h_in = model.eval_hidden
             actions, h_out = model.choose_action(observations, h_in)
 
             next_state, next_observations, reward, done = env.step(actions)
@@ -236,12 +241,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # the environment setting
     parser.add_argument('--game_version', type=str, default='latest', help='the version of the game')
-    parser.add_argument('--env_name', type=str, default='two_state_payoff_matrix', help='two_state_payoff_matrix')
+    parser.add_argument('--env_name', type=str, default='two_step_payoff_matrix', help='two_state_payoff_matrix,one_step_payoff_matrix,two_step_payoff_matrix')
     parser.add_argument('--seed', type=int, default=123, help='random seed')
     parser.add_argument('--rnn_hidden_dim', type=int, default=64, help='rnn dimension')
     # parser.add_argument('--rnn_hidden_dim', type=int, default=64, help='rnn dimension')
     parser.add_argument('--hyper_hidden_dim', type=int, default=64, help='hyper dimension')
     parser.add_argument('--qmix_hidden_dim', type=int, default=32, help='qmix dimension')
+    parser.add_argument('--episode_limit', type=int, default=50, help='qmix dimension')
     parser.add_argument('--critic_dim', type=int, default=128, help='critic dimension')
     parser.add_argument('--step_mul', type=int, default=8, help='how many steps to make an action')
     parser.add_argument('--n_agents', type=int, default=5, help='how many steps to make an action')
@@ -249,7 +255,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_episodes', type=int, default=20, help='random seed')
     parser.add_argument('--training_steps', type=int, default=100000, help='random seed')
 
-    parser.add_argument('--algo', type=str, default='pac', help='the algorithm to train the agent')
+    parser.add_argument('--algo', type=str, default='qmix', help='the algorithm to train the agent')
 
     parser.add_argument('--max_steps', type=int, default=2000000, help='total time steps')
     parser.add_argument('--n_episodes', type=int, default=1, help='the number of episodes before once training')
