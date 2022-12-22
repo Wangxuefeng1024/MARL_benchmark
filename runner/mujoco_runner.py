@@ -1,7 +1,6 @@
-import os, sys
-import gym
+import sys
+sys.path.append('../')
 import torch
-import datetime
 import argparse
 import numpy as np
 from multiagent_mujoco.mujoco_multi import MujocoMulti
@@ -19,17 +18,7 @@ def main(args):
 
     args.n_states = len(env.get_obs()[0])
     args.n_actions = env.action_space[0].shape[0]
-    # args.max_action = env.action_space.high[0]
-    # args.exploration_noise = args.exploration_noise * args.max_action
-    # print("Observations shape:", args.n_states)
-    # print("Actions shape:", args.n_actions)
-    # print("Action range:", np.min(env.action_space.low),
-    #       np.max(env.action_space.high))
     n_agents = args.n_agents
-    # n_actions = args.n_actions[0]
-    # n_states = args.n_states[0]
-    # args.n_actions = args.n_actions[0]
-    # args.n_states = args.n_states[0]
 
     writer = SummaryWriter(log_dir='../runs/'+ "mujoco/" + args.task + "/" + args.algo)
 
@@ -69,7 +58,7 @@ def main(args):
                 # actions.append(action)
             reward, terminated, _ = env.step(action)
             episode_reward += reward
-            env.render()
+
             step += 1
             total_step += 1
 
@@ -149,7 +138,7 @@ if __name__ == '__main__':
     parser.add_argument('--n-step', type=int, default=100)
     parser.add_argument('--batch-size', type=int, default=600)
     # parser.add_argument('--episode_before_train', type=int, default=1000)
-    parser.add_argument('--model_dir', type=str, default='./trained_model/mujoco/')
+
     parser.add_argument('--episode_before_train', type=int, default=2)
     # parser.add_argument('--test-num', type=int, default=10)
     parser.add_argument('--n_agents', type=int, default=2)

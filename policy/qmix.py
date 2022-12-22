@@ -8,6 +8,7 @@ from torch.distributions import Categorical
 from utils.encoder_basic import FeatureEncoder
 import glob
 import random
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class QMIX:
     def __init__(self, env, args):
@@ -566,7 +567,7 @@ class QMIX_matrix:
             h_outs.append(h_out)
 
             action = self.choose_action_with_epsilon_greedy(q_eval)
-            action = torch.tensor([action])
+            action = torch.tensor([action]).to(device)
             action = action.unsqueeze(0)
             actions.append(action)
 

@@ -1,3 +1,5 @@
+import sys
+sys.path.append('../')
 import torch
 from tensorboardX import SummaryWriter
 from envs.football.football_env import FootballEnv
